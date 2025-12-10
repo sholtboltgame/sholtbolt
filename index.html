@@ -1243,13 +1243,22 @@ window.closeExitModal = function() {
 
 window.confirmExit = function() {
     closeExitModal();
+    
+    // YENİ: Maçtan çıkarken skoru liderlik tablosuna kaydet
+    if (!isGuest && currentUserDoc) {
+        window.addScore(currentUserDoc, GAME.stats.totalScore);
+    }
+
     // Return to Main Menu (Loadout Screen)
     GAME.state = 'menu';
     ui.hudElements.forEach(el => el.style.display = 'none');
     ui.mainMenu.style.display = 'flex';
+    
     // Clean up game objects
     bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = [];
-    updateMenuStats(); // Fix: Update money when returning to menu
+    
+    updateMenuStats(); 
+    window.saveGame(); // İlerlemeyi (para vb.) kaydet
     SoundSys.buy();
 }
 
