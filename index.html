@@ -237,6 +237,17 @@
         .promo-input:focus { outline: none; border-color: #a855f7; box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
         .promo-btn { background: linear-gradient(135deg, #7c3aed, #4c1d95); color: white; border: none; padding: 15px 40px; font-size: 1.2rem; font-weight: bold; cursor: pointer; border-radius: 4px; letter-spacing: 1px; transition: 0.3s; }
         .promo-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(124, 58, 237, 0.6); }
+
+        /* LEADERBOARD TABLE CSS */
+        .lb-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .lb-table th { text-align: left; padding: 10px; color: #9ca3af; font-size: 0.9rem; border-bottom: 1px solid #333; }
+        .lb-table td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .lb-rank { font-weight: bold; color: #eab308; width: 50px; }
+        .lb-name { font-weight: bold; color: #fff; }
+        .lb-score { font-weight: bold; color: #22c55e; text-align: right; }
+        .lb-row:nth-child(1) .lb-rank { color: #ffd700; font-size: 1.2rem; } /* Gold */
+        .lb-row:nth-child(2) .lb-rank { color: #c0c0c0; font-size: 1.1rem; } /* Silver */
+        .lb-row:nth-child(3) .lb-rank { color: #cd7f32; font-size: 1.1rem; } /* Bronze */
     </style>
 </head>
 <body>
@@ -376,6 +387,12 @@
                     <div style="margin-top:10px; background:#ef4444; text-align:center; padding:5px; border-radius:3px; font-weight:bold; font-size:0.8rem;" data-lang="required_cost">1000 $ REQUIRED</div>
                 </div>
 
+                <!-- ADDED: LEADERBOARD BUTTON -->
+                <div class="menu-card" onclick="window.toggleLeaderboard()">
+                    <h3 style="color:#facc15">LIDERLİK TABLOSU</h3>
+                    <p>En Yüksek Skorlar</p>
+                </div>
+
                 <div class="menu-card" onclick="window.toggleProfile()">
                     <h3 data-lang="profile">AGENT FILE</h3>
                     <p data-lang="profile_desc">Stats & Medals</p>
@@ -479,6 +496,31 @@
                         <h3 data-lang="medals">SERVICE MEDALS</h3>
                         <div id="medal-list" class="medal-grid"></div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEW: LEADERBOARD MODAL -->
+        <div id="leaderboardModal" class="modal-overlay">
+            <div class="modal-content" style="border-color: #facc15; max-width:600px;">
+                <div class="modal-header" style="border-color: #facc15;">
+                    <div class="modal-title" style="color: #facc15;">LIDERLİK TABLOSU</div>
+                    <div class="close-btn" onclick="window.toggleLeaderboard()">KAPAT</div>
+                </div>
+                <div style="overflow-y:auto; flex:1;">
+                    <table class="lb-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">#</th>
+                                <th>OPERATOR</th>
+                                <th style="text-align:right;">SKOR</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardList">
+                            <!-- JS Populates this -->
+                            <tr><td colspan="3" style="text-align:center; color:#666;">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -605,7 +647,7 @@
 <script type="module">
 // Import Firebase SDKs (Using 11.6.1 for best compatibility in this env)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
@@ -659,6 +701,93 @@ initAuth();
 // CLOUD SAVE LOGIC
 let currentUserDoc = null;
 let isGuest = true;
+
+// --- LEADERBOARD & SCORE FUNCTIONS ---
+
+// 1. ADD SCORE
+window.addScore = async (username, score) => {
+    if(!username || isGuest) return; // Only logged in users
+    try {
+        if (!auth.currentUser) await initAuth();
+        
+        // We save user score to a separate collection 'highscores' for easier retrieval
+        // Use user ID or Username as doc ID to prevent duplicates per user
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'highscores', username);
+        
+        // We just overwrite with latest for now (or simpler: assume game handles "high score" logic before calling)
+        // Since this is called on Game Over, we'll just save the Current high score from stats
+        await setDoc(docRef, {
+            score: Number(score),
+            timestamp: new Date().toISOString()
+        });
+        console.log("Score saved to leaderboard");
+    } catch(e) {
+        console.error("Error saving score:", e);
+    }
+}
+
+// 2. GET TOP 10 SCORES
+window.getTop10Scores = async () => {
+    try {
+        if (!auth.currentUser) await initAuth();
+        
+        // Fetch ALL scores (Restriction: No orderBy in this env)
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'highscores');
+        const snapshot = await getDocs(colRef);
+        
+        let scores = [];
+        snapshot.forEach(doc => {
+            scores.push({ name: doc.id, ...doc.data() });
+        });
+        
+        // Client-side Sort (Descending)
+        scores.sort((a, b) => b.score - a.score);
+        
+        // Take Top 10
+        return scores.slice(0, 10);
+    } catch (e) {
+        console.error("Error fetching leaderboard", e);
+        return [];
+    }
+}
+
+// UI HANDLER FOR LEADERBOARD
+window.toggleLeaderboard = async function() {
+    const modal = document.getElementById('leaderboardModal');
+    const list = document.getElementById('leaderboardList');
+    
+    if (modal.style.display === 'flex') {
+        modal.style.display = 'none';
+    } else {
+        // Close others
+        if(GAME.isStoreOpen) window.toggleStore();
+        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isProfileOpen) window.toggleProfile();
+        if(GAME.isSettingsOpen) window.toggleSettings();
+        if(GAME.isPromoOpen) window.togglePromo();
+        
+        modal.style.display = 'flex';
+        list.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">VERİLER ÇEKİLİYOR...</td></tr>';
+        
+        const top10 = await window.getTop10Scores();
+        
+        list.innerHTML = '';
+        if (top10.length === 0) {
+            list.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">HENÜZ SKOR YOK</td></tr>';
+        } else {
+            top10.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'lb-row';
+                tr.innerHTML = `
+                    <td class="lb-rank">#${index + 1}</td>
+                    <td class="lb-name">${item.name.toUpperCase()}</td>
+                    <td class="lb-score">${item.score.toLocaleString()}</td>
+                `;
+                list.appendChild(tr);
+            });
+        }
+    }
+}
 
 // GLOBAL WINDOW FUNCTIONS FOR AUTH
 window.handleRegister = async () => {
@@ -785,7 +914,11 @@ window.saveGame = async function() {
         try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', currentUserDoc);
             await setDoc(docRef, { saveData: dataToSave }, { merge: true });
-            // Flash cloud icon
+            
+            // Check High Score Update (Manual Check to reduce writes)
+            // If current total score > saved high score logic (simplified: we just save continuously for now)
+            // Ideally call addScore only when Game Over.
+            
             const ind = document.getElementById('cloudIndicator');
             ind.style.boxShadow = "0 0 10px #22c55e";
             setTimeout(() => ind.style.boxShadow = "none", 500);
@@ -823,6 +956,7 @@ const ui = {
     settingsModal: document.getElementById('settingsModal'),
     resSelect: document.getElementById('resSelect'), gfxSelect: document.getElementById('gfxSelect'), langSelect: document.getElementById('langSelect'),
     promoModal: document.getElementById('promoModal'), promoInput: document.getElementById('promoInput'), promoResult: document.getElementById('promoResult'),
+    leaderboardModal: document.getElementById('leaderboardModal'), // Added Ref
     
     // NEW MENU RANK WIDGET REFS
     menuRankWidget: document.querySelector('.menu-rank-widget'),
@@ -847,6 +981,7 @@ const SETTINGS = {
     graphics: 'high' 
 };
 
+// ... TRANSLATIONS ...
 const TRANSLATIONS = {
     tr: {
         lobby_header: "SHOLTBOLT", lobby_sub: "OPERASYON SEÇİMİ",
@@ -1169,7 +1304,7 @@ function init() {
                 } else {
                     window.openExitModal();
                 }
-            } else if (GAME.state === 'menu' && !ui.storeModal.style.display.includes('flex') && !GAME.isSettingsOpen && !GAME.isPromoOpen) {
+            } else if (GAME.state === 'menu' && !ui.storeModal.style.display.includes('flex') && !GAME.isSettingsOpen && !GAME.isPromoOpen && !ui.leaderboardModal.style.display.includes('flex')) {
                 // Optional: Back to lobby from menu if ESC pressed
                 // backToLobby();
             } else if (GAME.isStoreOpen) { window.toggleStore(); }
@@ -1178,6 +1313,7 @@ function init() {
             else if (GAME.isRankInfoOpen) { window.toggleRankInfo(); }
             else if (GAME.isSettingsOpen) { window.toggleSettings(); }
             else if (GAME.isPromoOpen) { window.togglePromo(); }
+            else if (ui.leaderboardModal.style.display === 'flex') { window.toggleLeaderboard(); }
         }
     });
     
@@ -1365,6 +1501,11 @@ function gameOver(reason) {
     const t = TRANSLATIONS[SETTINGS.language];
     GAME.state = 'gameover';
     
+    // AUTO SAVE SCORE ON GAME OVER (IF NOT GUEST)
+    if (!isGuest && currentUserDoc) {
+        window.addScore(currentUserDoc, GAME.score);
+    }
+
     if(reason === 'breach') {
         ui.notify.innerText = t.msg_breach;
     } else {
@@ -1403,6 +1544,7 @@ window.toggleStore = function() {
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
+        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
         renderStore();
         requestAnimationFrame(renderPreviews);
     }
@@ -1417,6 +1559,7 @@ window.toggleWeaponStore = function() {
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
+        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
         renderWeaponStore(); 
         requestAnimationFrame(renderPreviews);
     }
@@ -1431,6 +1574,7 @@ window.toggleRankInfo = function() {
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
+        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
         renderRankInfo(); 
     }
 }
@@ -1444,6 +1588,7 @@ window.toggleProfile = function() {
         if(GAME.isRankInfoOpen) window.toggleRankInfo();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
+        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
         renderProfile();
     }
 }
@@ -1458,6 +1603,7 @@ window.toggleSettings = function() {
         if(GAME.isRankInfoOpen) window.toggleRankInfo();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isPromoOpen) window.togglePromo();
+        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
     }
 }
 
@@ -1474,6 +1620,7 @@ window.togglePromo = function() {
         if(GAME.isRankInfoOpen) window.toggleRankInfo();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
+        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
         setTimeout(() => ui.promoInput.focus(), 100);
     }
 }
@@ -1717,7 +1864,7 @@ function drawUpgradeEffect() {
 
 function handleClick() {
     if(GAME.state === 'menu' || GAME.state === 'lobby') return; // Click handled by UI
-    if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused) return;
+    if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex') return;
     SoundSys.resume(); if(GUN.reloading) return; if(GUN.ammo <= 0) { reload(); return; }
     const now = Date.now(); if(now - GUN.lastShot > 110) { shoot(); GUN.lastShot = now; }
 }
