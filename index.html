@@ -1262,10 +1262,18 @@ window.confirmExit = function() {
     ui.mainMenu.style.display = 'flex';
     
     // Clean up game objects
-    bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = [];
+    bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = []; defenseEnemies = []; // Defense enemies array clear eklendi
+    
+    // --- LEVEL SIFIRLAMA (İSTEK ÜZERİNE EKLENDİ) ---
+    // Maçtan çıkıldığında level 1'den tekrar başlasın
+    GAME.level = 1;
+    if(GAME.mode && GAME.modeLevels) {
+        GAME.modeLevels[GAME.mode] = 1;
+    }
+    // -----------------------------------------------
     
     updateMenuStats(); 
-    window.saveGame(); // İlerlemeyi (para, level vb.) buluta ve yerele kaydet
+    window.saveGame(); // İlerlemeyi (sıfırlanmış level ile) kaydet
     SoundSys.buy();
 }
 
