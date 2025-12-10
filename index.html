@@ -1014,7 +1014,8 @@ const TRANSLATIONS = {
         msg_breach: "SINIR İHLALİ! YARALANDIN!", 
         msg_wave: "DALGA",
         leaderboard_title: "LİDERLİK TABLOSU", leaderboard_desc: "En İyi Operatörler", lb_operator: "OPERATÖR", lb_loading: "VERİLER YÜKLENİYOR...", lb_no_scores: "HENÜZ SKOR YOK",
-        buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ"
+        buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ",
+        msg_score_saved: "SKOR KAYDEDİLDİ"
     },
     en: {
         lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION",
@@ -1034,7 +1035,8 @@ const TRANSLATIONS = {
         msg_breach: "BREACH DETECTED! MISSION FAILED!",
         msg_wave: "WAVE",
         leaderboard_title: "LEADERBOARD", leaderboard_desc: "Top Operators", lb_operator: "OPERATOR", lb_loading: "LOADING DATA...", lb_no_scores: "NO SCORES YET",
-        buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT"
+        buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT",
+        msg_score_saved: "SCORE SAVED"
     }
 };
 
@@ -1234,6 +1236,7 @@ window.closeExitModal = function() {
 
 window.confirmExit = function() {
     closeExitModal();
+    const t = TRANSLATIONS[SETTINGS.language];
     
     // SKOR KAYIT MEKANİZMASI
     // Maçtan her çıkışta mevcut toplam skoru liderlik tablosuna gönderir
@@ -1241,7 +1244,7 @@ window.confirmExit = function() {
         window.addScore(currentUserDoc, GAME.stats.totalScore);
         
         // Görsel Geri Bildirim
-        ui.notify.innerText = "SKOR KAYDEDİLDİ";
+        ui.notify.innerText = t.msg_score_saved;
         ui.notify.style.color = "#22c55e";
         ui.notify.style.opacity = 1;
         setTimeout(() => { ui.notify.style.opacity = 0; }, 2000);
