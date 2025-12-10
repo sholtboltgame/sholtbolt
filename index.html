@@ -1244,9 +1244,16 @@ window.closeExitModal = function() {
 window.confirmExit = function() {
     closeExitModal();
     
-    // YENİ: Maçtan çıkarken skoru liderlik tablosuna kaydet
+    // SKOR KAYIT MEKANİZMASI
+    // Maçtan her çıkışta mevcut toplam skoru liderlik tablosuna gönderir
     if (!isGuest && currentUserDoc) {
         window.addScore(currentUserDoc, GAME.stats.totalScore);
+        
+        // Görsel Geri Bildirim
+        ui.notify.innerText = "SKOR KAYDEDİLDİ";
+        ui.notify.style.color = "#22c55e";
+        ui.notify.style.opacity = 1;
+        setTimeout(() => { ui.notify.style.opacity = 0; }, 2000);
     }
 
     // Return to Main Menu (Loadout Screen)
@@ -1258,7 +1265,7 @@ window.confirmExit = function() {
     bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = [];
     
     updateMenuStats(); 
-    window.saveGame(); // İlerlemeyi (para vb.) kaydet
+    window.saveGame(); // İlerlemeyi (para, level vb.) buluta ve yerele kaydet
     SoundSys.buy();
 }
 
