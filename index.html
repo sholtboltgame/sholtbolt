@@ -651,6 +651,7 @@ import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://
 import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
+// ... existing firebase config code ...
 // FIREBASE CONFIGURATION STRATEGY
 // 1. Priority: Use Environment Config (Fixes 'admin-restricted' error in Preview)
 // 2. Fallback: Use User Provided Config (For local use/export)
@@ -683,17 +684,14 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 // AUTH INITIALIZATION (Fixes Permissions)
 const initAuth = async () => {
     try {
-        // If environment provides a token, use it to bypass restrictions
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-            // Fallback for local use
             await signInAnonymously(auth);
         }
         console.log("Connected to Game Server");
     } catch (error) {
         console.error("Auth Error", error);
-        // If auth fails, we might be offline or blocked, but game loop continues
     }
 };
 initAuth();
@@ -704,34 +702,82 @@ let isGuest = true;
 
 // --- LEADERBOARD & SCORE FUNCTIONS ---
 
-// 1. ADD SCORE
+// 1. UPDATE LEADERBOARD UI (Helper Function)
+window.refreshLeaderboardUI = async () => {
+    const list = document.getElementById('leaderboardList');
+    list.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">VERİLER ÇEKİLİYOR...</td></tr>';
+    
+    // Call getTop10Scores as requested
+    const top10 = await window.getTop10Scores();
+    
+    list.innerHTML = '';
+    if (top10.length === 0) {
+        list.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">HENÜZ SKOR YOK</td></tr>';
+    } else {
+        top10.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.className = 'lb-row';
+            let rankColor = "#fff";
+            if(index===0) rankColor="#ffd700";
+            if(index===1) rankColor="#c0c0c0";
+            if(index===2) rankColor="#cd7f32";
+            
+            tr.innerHTML = `
+                <td class="lb-rank" style="color:${rankColor}">#${index + 1}</td>
+                <td class="lb-name">${item.name.toUpperCase()}</td>
+                <td class="lb-score">${item.score.toLocaleString()}</td>
+            `;
+            list.appendChild(tr);
+        });
+    }
+}
+
+// 2. ADD SCORE (High Score Logic)
 window.addScore = async (username, score) => {
-    if(!username || isGuest) return; // Only logged in users
+    if(!username || isGuest) return; 
     try {
         if (!auth.currentUser) await initAuth();
         
-        // We save user score to a separate collection 'highscores' for easier retrieval
-        // Use user ID or Username as doc ID to prevent duplicates per user
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'highscores', username);
         
-        // We just overwrite with latest for now (or simpler: assume game handles "high score" logic before calling)
-        // Since this is called on Game Over, we'll just save the Current high score from stats
-        await setDoc(docRef, {
-            score: Number(score),
-            timestamp: new Date().toISOString()
-        });
-        console.log("Score saved to leaderboard");
+        // Check existing score first (Don't overwrite high score with lower score)
+        const docSnap = await getDoc(docRef);
+        let shouldUpdate = true;
+        
+        if (docSnap.exists()) {
+            const currentData = docSnap.data();
+            // Only update if new score is higher
+            if (currentData.score >= score) {
+                shouldUpdate = false;
+                console.log("Score not high enough to update.");
+            }
+        }
+        
+        if (shouldUpdate) {
+            await setDoc(docRef, {
+                score: Number(score),
+                timestamp: new Date().toISOString()
+            });
+            console.log("New High Score Saved!");
+            
+            // Requirement: Call getTop10Scores (via UI refresh) after adding
+            // Only refresh if the modal is actually open to save bandwidth, 
+            // but we call the logic as requested.
+            if(document.getElementById('leaderboardModal').style.display === 'flex') {
+                window.refreshLeaderboardUI();
+            }
+        }
     } catch(e) {
         console.error("Error saving score:", e);
     }
 }
 
-// 2. GET TOP 10 SCORES
+// 3. GET TOP 10 SCORES
 window.getTop10Scores = async () => {
     try {
         if (!auth.currentUser) await initAuth();
         
-        // Fetch ALL scores (Restriction: No orderBy in this env)
+        // Fetch ALL scores (Restriction: No complex orderBy in this env without indexes)
         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'highscores');
         const snapshot = await getDocs(colRef);
         
@@ -754,7 +800,6 @@ window.getTop10Scores = async () => {
 // UI HANDLER FOR LEADERBOARD
 window.toggleLeaderboard = async function() {
     const modal = document.getElementById('leaderboardModal');
-    const list = document.getElementById('leaderboardList');
     
     if (modal.style.display === 'flex') {
         modal.style.display = 'none';
@@ -767,25 +812,8 @@ window.toggleLeaderboard = async function() {
         if(GAME.isPromoOpen) window.togglePromo();
         
         modal.style.display = 'flex';
-        list.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">VERİLER ÇEKİLİYOR...</td></tr>';
-        
-        const top10 = await window.getTop10Scores();
-        
-        list.innerHTML = '';
-        if (top10.length === 0) {
-            list.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">HENÜZ SKOR YOK</td></tr>';
-        } else {
-            top10.forEach((item, index) => {
-                const tr = document.createElement('tr');
-                tr.className = 'lb-row';
-                tr.innerHTML = `
-                    <td class="lb-rank">#${index + 1}</td>
-                    <td class="lb-name">${item.name.toUpperCase()}</td>
-                    <td class="lb-score">${item.score.toLocaleString()}</td>
-                `;
-                list.appendChild(tr);
-            });
-        }
+        // Trigger fetch
+        window.refreshLeaderboardUI();
     }
 }
 
@@ -914,10 +942,6 @@ window.saveGame = async function() {
         try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', currentUserDoc);
             await setDoc(docRef, { saveData: dataToSave }, { merge: true });
-            
-            // Check High Score Update (Manual Check to reduce writes)
-            // If current total score > saved high score logic (simplified: we just save continuously for now)
-            // Ideally call addScore only when Game Over.
             
             const ind = document.getElementById('cloudIndicator');
             ind.style.boxShadow = "0 0 10px #22c55e";
@@ -1502,8 +1526,12 @@ function gameOver(reason) {
     GAME.state = 'gameover';
     
     // AUTO SAVE SCORE ON GAME OVER (IF NOT GUEST)
+    // Requirement: Call addScore when player finishes game
     if (!isGuest && currentUserDoc) {
-        window.addScore(currentUserDoc, GAME.score);
+        // We use GAME.stats.totalScore as the leaderboard metric (lifetime score)
+        // Or GAME.score (current run score)? Usually leaderboards are best run or total accumulated.
+        // Based on "Global Ops" style, let's use Total Lifetime Score for rank/prestige
+        window.addScore(currentUserDoc, GAME.stats.totalScore);
     }
 
     if(reason === 'breach') {
