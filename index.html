@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SholtBolt: Global Ops</title>
+    <!-- CRAZYGAMES SDK EKLENDİ -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v1.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; color: white; font-family: 'Segoe UI', sans-serif; user-select: none; display: flex; justify-content: center; align-items: center; height: 100vh; }
@@ -645,16 +647,13 @@
     </div>
 
 <script type="module">
-// Import Firebase SDKs (Using 11.6.1 for best compatibility in this env)
+// Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
 // ... existing firebase config code ...
-// FIREBASE CONFIGURATION STRATEGY
-// 1. Priority: Use Environment Config (Fixes 'admin-restricted' error in Preview)
-// 2. Fallback: Use User Provided Config (For local use/export)
 let firebaseConfig;
 if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
@@ -674,14 +673,13 @@ if (typeof __firebase_config !== 'undefined') {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Analytics can fail in strict iframe environments, so we wrap it
+// Analytics can fail in strict iframe environments
 let analytics;
-try { analytics = getAnalytics(app); } catch(e) { console.log("Analytics not supported in this env"); }
+try { analytics = getAnalytics(app); } catch(e) { console.log("Analytics not supported"); }
 
-// App ID logic
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// AUTH INITIALIZATION (Fixes Permissions)
+// AUTH INITIALIZATION
 const initAuth = async () => {
     try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -696,21 +694,46 @@ const initAuth = async () => {
 };
 initAuth();
 
-// CLOUD SAVE LOGIC
+// CRAZYGAMES AD LOGIC HELPER
+window.triggerCrazyGamesAd = function(onComplete) {
+    const callbacks = {
+        adFinished: () => {
+            console.log("End midgame ad");
+            // Sesi aç
+            if(actx && actx.resume) actx.resume();
+            if(onComplete) onComplete();
+        },
+        adError: (error) => {
+            console.log("Error midgame ad", error);
+            // Hata olsa bile oyunu devam ettir (Sesi aç)
+            if(actx && actx.resume) actx.resume();
+            if(onComplete) onComplete();
+        },
+        adStarted: () => {
+            console.log("Start midgame ad");
+            // Sesi kapat
+            if(actx && actx.suspend) actx.suspend();
+        }
+    };
+
+    if(window.CrazyGames && window.CrazyGames.SDK) {
+        window.CrazyGames.SDK.ad.requestAd("midgame", callbacks);
+    } else {
+        console.log("CrazyGames SDK not found or blocked, skipping ad.");
+        if(onComplete) onComplete();
+    }
+}
+
+// ... CLOUD SAVE LOGIC & OTHER GLOBAL FUNCTIONS REMAIN THE SAME ...
 let currentUserDoc = null;
 let isGuest = true;
 
-// --- LEADERBOARD & SCORE FUNCTIONS ---
-
-// 1. UPDATE LEADERBOARD UI (Helper Function)
-window.refreshLeaderboardUI = async () => {
+// ... (Leaderboard, AddScore, GetTop10Scores functions omitted for brevity but remain) ...
+window.refreshLeaderboardUI = async () => { /* ... existing ... */ 
     const list = document.getElementById('leaderboardList');
     const t = TRANSLATIONS[SETTINGS.language];
     list.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">${t.lb_loading || 'LOADING...'}</td></tr>`;
-    
-    // Call getTop10Scores as requested
     const top10 = await window.getTop10Scores();
-    
     list.innerHTML = '';
     if (top10.length === 0) {
         list.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">${t.lb_no_scores || 'NO SCORES YET'}</td></tr>`;
@@ -722,7 +745,6 @@ window.refreshLeaderboardUI = async () => {
             if(index===0) rankColor="#ffd700";
             if(index===1) rankColor="#c0c0c0";
             if(index===2) rankColor="#cd7f32";
-            
             tr.innerHTML = `
                 <td class="lb-rank" style="color:${rankColor}">#${index + 1}</td>
                 <td class="lb-name">${item.name.toUpperCase()}</td>
@@ -733,48 +755,25 @@ window.refreshLeaderboardUI = async () => {
     }
 }
 
-// 2. ADD SCORE (High Score Logic)
-window.addScore = async (username, score) => {
+window.addScore = async (username, score) => { /* ... existing ... */ 
     if(!username || isGuest) return; 
     try {
         if (!auth.currentUser) await initAuth();
-        
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'highscores', username);
-        
-        // Check existing score first (Don't overwrite high score with lower score)
         const docSnap = await getDoc(docRef);
         let shouldUpdate = true;
-        
         if (docSnap.exists()) {
             const currentData = docSnap.data();
-            // Only update if new score is higher
-            if (currentData.score >= score) {
-                shouldUpdate = false;
-                console.log("Score not high enough to update.");
-            }
+            if (currentData.score >= score) { shouldUpdate = false; }
         }
-        
         if (shouldUpdate) {
-            await setDoc(docRef, {
-                score: Number(score),
-                timestamp: new Date().toISOString()
-            });
-            console.log("New High Score Saved!");
-            
-            // Requirement: Call getTop10Scores (via UI refresh) after adding
-            // Only refresh if the modal is actually open to save bandwidth, 
-            // but we call the logic as requested.
-            if(document.getElementById('leaderboardModal').style.display === 'flex') {
-                window.refreshLeaderboardUI();
-            }
+            await setDoc(docRef, { score: Number(score), timestamp: new Date().toISOString() });
+            if(document.getElementById('leaderboardModal').style.display === 'flex') window.refreshLeaderboardUI();
         }
-    } catch(e) {
-        console.error("Error saving score:", e);
-    }
+    } catch(e) { console.error("Error saving score:", e); }
 }
 
-// 3. GET TOP 10 SCORES
-window.getTop10Scores = async () => {
+window.getTop10Scores = async () => { /* ... existing ... */ 
     try {
         if (!auth.currentUser) await initAuth();
         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'highscores');
@@ -785,262 +784,140 @@ window.getTop10Scores = async () => {
         return scores.slice(0, 10);
     } catch (e) { return []; }
 }
-
-// UI HANDLER FOR LEADERBOARD
-window.toggleLeaderboard = async function() {
+// ... (ToggleLeaderboard, Auth Functions omitted for brevity but remain) ...
+window.toggleLeaderboard = async function() { /* ... existing ... */ 
     const modal = document.getElementById('leaderboardModal');
-    
-    if (modal.style.display === 'flex') {
-        modal.style.display = 'none';
-    } else {
-        // Close others
+    if (modal.style.display === 'flex') { modal.style.display = 'none'; } else {
         if(GAME.isStoreOpen) window.toggleStore();
         if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
-        
         modal.style.display = 'flex';
-        // Trigger fetch
         window.refreshLeaderboardUI();
     }
 }
-
-// GLOBAL WINDOW FUNCTIONS FOR AUTH
-window.handleRegister = async () => {
+window.handleRegister = async () => { /* ... existing ... */ 
     const user = document.getElementById('authUsername').value.trim().toLowerCase();
     const pass = document.getElementById('authPassword').value;
     const status = document.getElementById('authStatus');
-    
     if(!user || !pass) { status.innerText = "ENTER USERNAME & PASSWORD"; return; }
     if(user.length < 3) { status.innerText = "USERNAME TOO SHORT"; return; }
-    
     status.style.color = "#eab308";
     status.innerText = "CONNECTING...";
-    
     try {
-        // Ensure we are authenticated before querying
         if (!auth.currentUser) await initAuth(); 
-        
-        // Use strict path for public data
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', user);
         const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-            status.style.color = "#ef4444";
-            status.innerText = "USERNAME TAKEN";
-        } else {
-            // Create new account
-            await setDoc(docRef, {
-                password: btoa(pass), // Basic encoding
-                saveData: defaultGame,
-                createdAt: new Date().toISOString()
-            });
-            status.style.color = "#22c55e";
-            status.innerText = "REGISTERED! PLEASE LOGIN.";
+        if (docSnap.exists()) { status.style.color = "#ef4444"; status.innerText = "USERNAME TAKEN"; } else {
+            await setDoc(docRef, { password: btoa(pass), saveData: defaultGame, createdAt: new Date().toISOString() });
+            status.style.color = "#22c55e"; status.innerText = "REGISTERED! PLEASE LOGIN.";
         }
-    } catch(e) {
-        console.error(e);
-        status.style.color = "#ef4444";
-        status.innerText = "SERVER ERROR (TRY GUEST)";
-    }
+    } catch(e) { console.error(e); status.style.color = "#ef4444"; status.innerText = "SERVER ERROR (TRY GUEST)"; }
 }
-
-window.handleLogin = async () => {
+window.handleLogin = async () => { /* ... existing ... */ 
     const user = document.getElementById('authUsername').value.trim().toLowerCase();
     const pass = document.getElementById('authPassword').value;
     const status = document.getElementById('authStatus');
-    
     if(!user || !pass) { status.innerText = "ENTER USERNAME & PASSWORD"; return; }
-    
-    status.style.color = "#eab308";
-    status.innerText = "LOGGING IN...";
-    
+    status.style.color = "#eab308"; status.innerText = "LOGGING IN...";
     try {
         if (!auth.currentUser) await initAuth();
-
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', user);
         const docSnap = await getDoc(docRef);
-        
         if (docSnap.exists()) {
             const data = docSnap.data();
             if(data.password === btoa(pass)) {
-                // SUCCESS
-                currentUserDoc = user;
-                isGuest = false;
-                
-                // LOAD DATA
-                if(data.saveData) {
-                    GAME = { ...defaultGame, ...data.saveData };
-                    // Ensure essential arrays
-                    if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
-                    // Settings load
-                    SETTINGS.language = GAME.settings.lang || 'en';
-                    SETTINGS.resolution = GAME.settings.res || '1920x1080';
-                    SETTINGS.graphics = GAME.settings.gfx || 'high';
-                }
-                
-                document.getElementById('authModal').style.display = 'none';
-                document.getElementById('lobbyScreen').style.display = 'flex';
-                updateCloudStatus("ONLINE: " + user.toUpperCase(), "#22c55e");
-                initGameUI();
-            } else {
-                status.style.color = "#ef4444";
-                status.innerText = "WRONG PASSWORD";
-            }
-        } else {
-            status.style.color = "#ef4444";
-            status.innerText = "USER NOT FOUND";
-        }
-    } catch(e) {
-        console.error(e);
-        status.style.color = "#ef4444";
-        status.innerText = "CONNECTION FAILED";
-    }
+                currentUserDoc = user; isGuest = false;
+                if(data.saveData) { GAME = { ...defaultGame, ...data.saveData }; if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1}; SETTINGS.language = GAME.settings.lang || 'en'; SETTINGS.resolution = GAME.settings.res || '1920x1080'; SETTINGS.graphics = GAME.settings.gfx || 'high'; }
+                document.getElementById('authModal').style.display = 'none'; document.getElementById('lobbyScreen').style.display = 'flex';
+                updateCloudStatus("ONLINE: " + user.toUpperCase(), "#22c55e"); initGameUI();
+            } else { status.style.color = "#ef4444"; status.innerText = "WRONG PASSWORD"; }
+        } else { status.style.color = "#ef4444"; status.innerText = "USER NOT FOUND"; }
+    } catch(e) { console.error(e); status.style.color = "#ef4444"; status.innerText = "CONNECTION FAILED"; }
 }
-
-window.handleGuest = () => {
-    isGuest = true;
-    currentUserDoc = null;
-    // Load local storage if exists
-    try { 
-        let saved = JSON.parse(localStorage.getItem('glock_classic_save'));
-        if(saved) GAME = { ...defaultGame, ...saved };
-    } catch(e) {}
-    
-    document.getElementById('authModal').style.display = 'none';
-    document.getElementById('lobbyScreen').style.display = 'flex';
-    updateCloudStatus("GUEST MODE (LOCAL ONLY)", "#fbbf24");
-    initGameUI();
+window.handleGuest = () => { /* ... existing ... */ 
+    isGuest = true; currentUserDoc = null;
+    try { let saved = JSON.parse(localStorage.getItem('glock_classic_save')); if(saved) GAME = { ...defaultGame, ...saved }; } catch(e) {}
+    document.getElementById('authModal').style.display = 'none'; document.getElementById('lobbyScreen').style.display = 'flex';
+    updateCloudStatus("GUEST MODE (LOCAL ONLY)", "#fbbf24"); initGameUI();
 }
-
-function updateCloudStatus(text, color) {
-    document.getElementById('cloudText').innerText = text;
-    document.getElementById('cloudIndicator').style.background = color;
-}
-
-// Global Save Function (Overrides the local one)
-window.saveGame = async function() {
-    // 1. Save to Local Storage (Backup)
+function updateCloudStatus(text, color) { document.getElementById('cloudText').innerText = text; document.getElementById('cloudIndicator').style.background = color; }
+window.saveGame = async function() { /* ... existing ... */ 
     GAME.settings = { lang: SETTINGS.language, res: SETTINGS.resolution, gfx: SETTINGS.graphics };
     const dataToSave = { ...GAME, state: 'lobby', isPaused: false, isPromoOpen: false };
     try { localStorage.setItem('glock_classic_save', JSON.stringify(dataToSave)); } catch(e) {}
-    
-    // 2. Save to Cloud if Logged In
     if(!isGuest && currentUserDoc) {
         try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', currentUserDoc);
             await setDoc(docRef, { saveData: dataToSave }, { merge: true });
-            
-            const ind = document.getElementById('cloudIndicator');
-            ind.style.boxShadow = "0 0 10px #22c55e";
-            setTimeout(() => ind.style.boxShadow = "none", 500);
+            const ind = document.getElementById('cloudIndicator'); ind.style.boxShadow = "0 0 10px #22c55e"; setTimeout(() => ind.style.boxShadow = "none", 500);
         } catch(e) { console.error("Cloud Save Fail", e); }
     }
 }
 
+// ... GAME VARIABLES ...
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const gameContainer = document.getElementById('gameContainer');
-
 // UI Refs
 const ui = {
-    lobbyScreen: document.getElementById('lobbyScreen'),
-    mainMenu: document.getElementById('mainMenu'),
-    selectedModeDisplay: document.getElementById('selectedModeDisplay'),
-    menuDmgLevel: document.getElementById('menuDmgLevel'),
-    menuBalance: document.getElementById('menuBalance'),
-    hudElements: document.querySelectorAll('.hud-element'),
-    hostagePanel: document.getElementById('hostagePanel'), 
-    ammoCount: document.getElementById('ammoCount'), ammoBar: document.getElementById('ammoBar'),
-    levelText: document.getElementById('levelText'), scoreDisplay: document.getElementById('scoreDisplay'),
-    coinDisplay: document.getElementById('coinDisplay'), notify: document.getElementById('levelNotify'),
-    storeModal: document.getElementById('storeModal'), storeList: document.getElementById('storeSkinsList'),
-    weaponModal: document.getElementById('weaponModal'), weaponList: document.getElementById('weaponList'),
-    profileModal: document.getElementById('profileModal'),
-    timerDisplay: document.getElementById('timerDisplay'), rankTitle: document.getElementById('rankTitle'),
-    currentRankIcon: document.getElementById('currentRankIcon'), rankSub: document.getElementById('rankSub'),
-    weaponLevelText: document.getElementById('weaponLevelText'), rankInfoModal: document.getElementById('rankInfoModal'),
-    rankListContainer: document.getElementById('rankListContainer'), gunName: document.getElementById('gunNameDisplay'),
-    tutorialOverlay: document.getElementById('tutorialOverlay'), tutObjective: document.getElementById('tut-objective-text'),
-    rankPanel: document.getElementById('rankPanel'), rankModalContent: document.getElementById('rankModalContent'),
-    rankProgressBar: document.getElementById('rankProgressBar'), rankProgressText: document.getElementById('rankProgressText'),
-    exitModal: document.getElementById('exitModal'),
-    settingsModal: document.getElementById('settingsModal'),
-    resSelect: document.getElementById('resSelect'), gfxSelect: document.getElementById('gfxSelect'), langSelect: document.getElementById('langSelect'),
-    promoModal: document.getElementById('promoModal'), promoInput: document.getElementById('promoInput'), promoResult: document.getElementById('promoResult'),
-    leaderboardModal: document.getElementById('leaderboardModal'), // Added Ref
-    
-    // NEW MENU RANK WIDGET REFS
-    menuRankWidget: document.querySelector('.menu-rank-widget'),
-    menuRankIcon: document.getElementById('menuRankIcon'),
-    menuRankName: document.getElementById('menuRankName')
+    lobbyScreen: document.getElementById('lobbyScreen'), mainMenu: document.getElementById('mainMenu'), selectedModeDisplay: document.getElementById('selectedModeDisplay'),
+    menuDmgLevel: document.getElementById('menuDmgLevel'), menuBalance: document.getElementById('menuBalance'), hudElements: document.querySelectorAll('.hud-element'),
+    hostagePanel: document.getElementById('hostagePanel'), ammoCount: document.getElementById('ammoCount'), ammoBar: document.getElementById('ammoBar'),
+    levelText: document.getElementById('levelText'), scoreDisplay: document.getElementById('scoreDisplay'), coinDisplay: document.getElementById('coinDisplay'),
+    notify: document.getElementById('levelNotify'), storeModal: document.getElementById('storeModal'), storeList: document.getElementById('storeSkinsList'),
+    weaponModal: document.getElementById('weaponModal'), weaponList: document.getElementById('weaponList'), profileModal: document.getElementById('profileModal'),
+    timerDisplay: document.getElementById('timerDisplay'), rankTitle: document.getElementById('rankTitle'), currentRankIcon: document.getElementById('currentRankIcon'),
+    rankSub: document.getElementById('rankSub'), weaponLevelText: document.getElementById('weaponLevelText'), rankInfoModal: document.getElementById('rankInfoModal'),
+    rankListContainer: document.getElementById('rankListContainer'), gunName: document.getElementById('gunNameDisplay'), tutorialOverlay: document.getElementById('tutorialOverlay'),
+    tutObjective: document.getElementById('tut-objective-text'), rankPanel: document.getElementById('rankPanel'), rankModalContent: document.getElementById('rankModalContent'),
+    rankProgressBar: document.getElementById('rankProgressBar'), rankProgressText: document.getElementById('rankProgressText'), exitModal: document.getElementById('exitModal'),
+    settingsModal: document.getElementById('settingsModal'), resSelect: document.getElementById('resSelect'), gfxSelect: document.getElementById('gfxSelect'),
+    langSelect: document.getElementById('langSelect'), promoModal: document.getElementById('promoModal'), promoInput: document.getElementById('promoInput'),
+    promoResult: document.getElementById('promoResult'), leaderboardModal: document.getElementById('leaderboardModal'),
+    menuRankWidget: document.querySelector('.menu-rank-widget'), menuRankIcon: document.getElementById('menuRankIcon'), menuRankName: document.getElementById('menuRankName')
 };
-
 let width, height;
 const GRAVITY = 0.6;
-let menuRotation = 0; // for showcase
-
-// Fix for ReferenceError: mouse is not defined
+let menuRotation = 0;
 let mouse = { x: 0, y: 0 };
-// Fix for ReferenceError: UPGRADE is not defined
 const UPGRADE = { active: false, phase: 0, timer: 0, boxY: -100, boxScale: 1, glow: 0, particles: [] };
 
-
 // SETTINGS & TRANSLATIONS
-const SETTINGS = {
-    language: 'en', // Changed Default to EN
-    resolution: '1920x1080', 
-    graphics: 'high' 
-};
-
-// ... TRANSLATIONS ...
+const SETTINGS = { language: 'en', resolution: '1920x1080', graphics: 'high' };
 const TRANSLATIONS = {
     tr: {
-        lobby_header: "SHOLTBOLT", lobby_sub: "OPERASYON SEÇİMİ",
-        tag_hard: "ZOR", tag_timed: "ZAMANLI", tag_standard: "STANDART", tag_locked: "KİLİTLİ", tag_survival: "HAYATTA KAL",
+        lobby_header: "SHOLTBOLT", lobby_sub: "OPERASYON SEÇİMİ", tag_hard: "ZOR", tag_timed: "ZAMANLI", tag_standard: "STANDART", tag_locked: "KİLİTLİ", tag_survival: "HAYATTA KAL",
         mode_reflex_title: "REFLEX OPS", mode_reflex_desc: "Hedefler aniden belirir ve kaybolur. Sadece en hızlılar hayatta kalır.",
         mode_hostage_title: "REHİNE KRİZİ", mode_hostage_desc: "Market baskını! 25 saniyede düşmanları temizle ve rehineyi kurtar.",
         mode_classic_title: "KARGO SAVUNMASI", mode_classic_desc: "Klasik oyun modu. Düşen kargo sandıklarını yok et ve puan kazan.",
         mode_defense_title: "SAVUNMA HATTI", mode_defense_desc: "Kutular saldırıyor! Sana temas etmeden hepsini yok et.",
         mode_range_title: "POLİGON", mode_range_desc: "Haraketli hedefler. Keskin nişancı eğitimi için ideal. (Yakında)",
         mode_comp_title: "REKABETÇİ", mode_comp_desc: "Sıralamalı maçlar. 5v5 Simülasyonu. (Yakında)",
-        // ... existing translations ...
-        tut_reflex: "Kırmızı hedefler aniden belirir. Süre bitmeden vur!",
-        tut_hostage: "REHİNEYİ KURTARMAK İÇİN HEPSİNİ VUR!",
-        tut_classic: "Blokları yok et, para kazan ve silahını güçlendir.",
-        tut_defense: "DÜŞMANLAR YAKLAŞIYOR! TEMAS ETMEDEN VUR!",
+        tut_reflex: "Kırmızı hedefler aniden belirir. Süre bitmeden vur!", tut_hostage: "REHİNEYİ KURTARMAK İÇİN HEPSİNİ VUR!",
+        tut_classic: "Blokları yok et, para kazan ve silahını güçlendir.", tut_defense: "DÜŞMANLAR YAKLAŞIYOR! TEMAS ETMEDEN VUR!",
         msg_timeup: "SÜRE BİTTİ!", msg_level_clear: "BÖLÜM GEÇİLDİ!", msg_all_saved: "TÜM REHİNELER KURTARILDI!", msg_saved: "REHİNE KURTARILDI!",
-        msg_breach: "SINIR İHLALİ! YARALANDIN!", 
-        msg_wave: "DALGA",
-        leaderboard_title: "LİDERLİK TABLOSU", leaderboard_desc: "En İyi Operatörler", lb_operator: "OPERATÖR", lb_loading: "VERİLER YÜKLENİYOR...", lb_no_scores: "HENÜZ SKOR YOK",
-        buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ",
-        msg_score_saved: "SKOR KAYDEDİLDİ"
+        msg_breach: "SINIR İHLALİ! YARALANDIN!", msg_wave: "DALGA", leaderboard_title: "LİDERLİK TABLOSU", leaderboard_desc: "En İyi Operatörler", lb_operator: "OPERATÖR",
+        lb_loading: "VERİLER YÜKLENİYOR...", lb_no_scores: "HENÜZ SKOR YOK", buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ", msg_score_saved: "SKOR KAYDEDİLDİ"
     },
     en: {
-        lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION",
-        tag_hard: "HARD", tag_timed: "TIMED", tag_standard: "STANDARD", tag_locked: "LOCKED", tag_survival: "SURVIVAL",
+        lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION", tag_hard: "HARD", tag_timed: "TIMED", tag_standard: "STANDARD", tag_locked: "LOCKED", tag_survival: "SURVIVAL",
         mode_reflex_title: "REFLEX OPS", mode_reflex_desc: "Targets appear and vanish instantly. Only the fastest survive.",
         mode_hostage_title: "HOSTAGE CRISIS", mode_hostage_desc: "Market raid! Eliminate hostiles and save the hostage in 25s.",
         mode_classic_title: "CARGO DEFENSE", mode_classic_desc: "Classic mode. Destroy dropping crates and earn points.",
         mode_defense_title: "DEFENSE LINE", mode_defense_desc: "Enemies are rushing! Don't let them touch you.",
         mode_range_title: "SHOOTING RANGE", mode_range_desc: "Moving targets. Sniper training. (Coming Soon)",
         mode_comp_title: "COMPETITIVE", mode_comp_desc: "Ranked matches. 5v5 Simulation. (Coming Soon)",
-        // ... existing translations ...
-        tut_reflex: "Red targets appear suddenly. Hit them before time runs out!",
-        tut_hostage: "SHOOT THEM ALL TO SAVE THE HOSTAGE!",
-        tut_classic: "Destroy blocks, earn cash, and upgrade weapon.",
-        tut_defense: "ENEMIES INCOMING! DON'T LET THEM TOUCH YOU!",
+        tut_reflex: "Red targets appear suddenly. Hit them before time runs out!", tut_hostage: "SHOOT THEM ALL TO SAVE THE HOSTAGE!",
+        tut_classic: "Destroy blocks, earn cash, and upgrade weapon.", tut_defense: "ENEMIES INCOMING! DON'T LET THEM TOUCH YOU!",
         msg_timeup: "TIME UP!", msg_level_clear: "LEVEL CLEARED!", msg_all_saved: "ALL HOSTAGES RESCUED!", msg_saved: "HOSTAGE SAVED!",
-        msg_breach: "BREACH DETECTED! MISSION FAILED!",
-        msg_wave: "WAVE",
-        leaderboard_title: "LEADERBOARD", leaderboard_desc: "Top Operators", lb_operator: "OPERATOR", lb_loading: "LOADING DATA...", lb_no_scores: "NO SCORES YET",
-        buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT",
-        msg_score_saved: "SCORE SAVED"
+        msg_breach: "BREACH DETECTED! MISSION FAILED!", msg_wave: "WAVE", leaderboard_title: "LEADERBOARD", leaderboard_desc: "Top Operators", lb_operator: "OPERATOR",
+        lb_loading: "LOADING DATA...", lb_no_scores: "NO SCORES YET", buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT", msg_score_saved: "SCORE SAVED"
     }
 };
 
-// WEAPONS CONFIG
+// ... CONSTANTS (WEAPONS, MEDALS, RANKS, SKINS, DefaultGame) ...
 const WEAPONS = {
     'glock': { name: 'Glock 19 Gen 5', capacity: 15, damage: 1.0, reloadTime: 1200, price: 0, desc: "Standard Issue. Reliable." },
     'beretta': { name: 'Beretta 92FS', capacity: 15, damage: 1.15, reloadTime: 1400, price: 2500, desc: "Legendary 9mm. High Accuracy." },
@@ -1048,8 +925,6 @@ const WEAPONS = {
     'magnum': { name: 'Desert Eagle', capacity: 8, damage: 2.5, reloadTime: 1800, price: 9500, desc: "Hand Cannon. Pure Power." },
     'fn57': { name: 'FN Five-seveN', capacity: 20, damage: 1.1, reloadTime: 1100, price: 11000, desc: "20 Rounds. Armor Piercing." }
 };
-
-// MEDALS CONFIG
 const MEDALS = [
     { id: 'recruit', name: 'Recruit', desc: 'Destroy your first target.', icon: '🎯', check: (g) => g.stats.totalBlocks > 0 },
     { id: 'rich', name: 'Rich', desc: 'Amass 10,000 $.', icon: '💰', check: (g) => g.coins >= 10000 },
@@ -1059,7 +934,6 @@ const MEDALS = [
     { id: 'collector', name: 'Collector', desc: 'Own 5 Weapons.', icon: '🎒', check: (g) => g.ownedWeapons.length >= 5 },
     { id: 'terminator', name: 'Terminator', desc: 'Destroy 1000 Targets.', icon: '💀', check: (g) => g.stats.totalBlocks >= 1000 }
 ];
-
 const RANK_SYSTEM = [
     { name: "TRAINEE", min: 1, max: 10, color: "#9ca3af", reward: 0, icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" },
     { name: "BRONZE", min: 11, max: 25, color: "#cd7f32", reward: 500, icon: "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" },
@@ -1070,10 +944,7 @@ const RANK_SYSTEM = [
     { name: "ELITE MASTER", min: 181, max: 300, color: "#ef4444", reward: 25000, icon: "M12 2c-4.42 0-8 3.58-8 8 0 4.42 3.58 8 8 8s8-3.58 8-8c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" },
     { name: "GLOBAL LEGEND", min: 301, max: 9999, color: "#f472b6", reward: 50000, icon: "M12 1L9 8h6zM12 23l3-7H9zM3 12l7 3V9zM3 12l7 3V9zM3 12l7 3V9zM21 12l-7-3v6z" }
 ];
-
 const SUB_RANKS = ["I", "II", "III", "IV"];
-
-// SKINS CONFIG
 const SKINS = {
     'skin_black': { id: 'skin_black', name: 'Factory New', price: 0, type: 'gun', color: '#1a1a1a', slideColor: '#2d2d2d' },
     'skin_silver': { id: 'skin_silver', name: 'Platinum Plated', price: 2000, type: 'gun', color: '#1a1a1a', slideColor: '#e0e0e0' },
@@ -1085,221 +956,97 @@ const SKINS = {
     'silencer_default': { id: 'silencer_default', name: 'Standard Suppressor', price: 0, type: 'silencer', color: '#222' },
     'silencer_gold': { id: 'silencer_gold', name: 'Golden Suppressor', price: 6300, type: 'silencer', color: '#ffd700' }
 };
-
-// Game State (Auto Save)
 const defaultGame = {
     level: 1, maxLevel: 9999, state: 'lobby', mode: 'classic', score: 0, coins: 150, 
     wallHP: 0, isStoreOpen: false, isWeaponStoreOpen: false, isRankInfoOpen: false, isProfileOpen: false, isSettingsOpen: false, reloadCost: 50,
-    isPromoOpen: false, // New State
-    ownedSkins: ['skin_black', 'silencer_default'], 
-    ownedWeapons: ['glock'],
-    currentWeapon: 'glock',
-    currentSkin: 'skin_black', currentSilencer: 'silencer_default',
-    timer: 0, maxTime: 0, lastTime: 0, weaponLevel: 1, hitStreak: 0,
-    stats: { totalScore: 0, totalBlocks: 0 },
-    hostagesSaved: 0, totalHostages: 6, // NEW STATE
-    weaponUsage: {},
-    unlockedMedals: [],
-    redeemedCodes: [], // New state for codes
-    // MOD LEVELS (NEW: Separate progress for each mode)
-    modeLevels: {
-        classic: 1,
-        reflex: 1,
-        hostage: 1,
-        defense: 1
-    },
-    isPaused: false,
-    settings: { lang: 'en', res: '1920x1080', gfx: 'high' } // Default Persistent Settings: EN
+    isPromoOpen: false, ownedSkins: ['skin_black', 'silencer_default'], ownedWeapons: ['glock'], currentWeapon: 'glock',
+    currentSkin: 'skin_black', currentSilencer: 'silencer_default', timer: 0, maxTime: 0, lastTime: 0, weaponLevel: 1, hitStreak: 0,
+    stats: { totalScore: 0, totalBlocks: 0 }, hostagesSaved: 0, totalHostages: 6, weaponUsage: {}, unlockedMedals: [], redeemedCodes: [],
+    modeLevels: { classic: 1, reflex: 1, hostage: 1, defense: 1 }, isPaused: false, settings: { lang: 'en', res: '1920x1080', gfx: 'high' }
 };
-
-// INITIALIZE GAME VAR AS DEFAULT (Data loaded after auth)
 let GAME = JSON.parse(JSON.stringify(defaultGame));
-
-const GUN = {
-    x: 0, y: 0, angle: 0, recoilX: 0, recoilAngle: 0, slideOffset: 0, lastShot: 0, ammo: 15, maxAmmo: 15, reloading: false,
-    attachments: { scope: false, silencer: false, laser: false }
-};
-
-if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity;
-GUN.ammo = GUN.maxAmmo;
-
-let bullets = [], particles = [], shells = [], magazines = [], wallBlocks = [], reflexTargets = [];
-let defenseEnemies = []; // NEW ARRAY FOR DEFENSE MODE
-let containerRect = null;
-let currentFullRankName = "";
-let flashTimer=0, flashPos={x:0, y:0};
-let reflexSpawnTimer = 0; // For new mode
-let defenseSpawnTimer = 0; // NEW TIMER
-
+const GUN = { x: 0, y: 0, angle: 0, recoilX: 0, recoilAngle: 0, slideOffset: 0, lastShot: 0, ammo: 15, maxAmmo: 15, reloading: false, attachments: { scope: false, silencer: false, laser: false } };
+if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity; GUN.ammo = GUN.maxAmmo;
+let bullets = [], particles = [], shells = [], magazines = [], wallBlocks = [], reflexTargets = [], defenseEnemies = [];
+let containerRect = null; let currentFullRankName = ""; let flashTimer=0, flashPos={x:0, y:0}; let reflexSpawnTimer = 0; let defenseSpawnTimer = 0;
 const HITMAN_ANIM = { active: false, timer: 0, alpha: 0 };
 const RANK_UP_ANIM = { active: false, timer: 0, text: "", subText: "", rewardText: "" };
 
+// ... (SelectMode, BackToLobby, StartGameFromMenu Functions) ...
 window.selectMode = function(modeName) {
-    GAME.mode = modeName;
-    
-    // NEW: Load the specific level for this mode
-    GAME.level = GAME.modeLevels[modeName] || 1;
-    
-    ui.lobbyScreen.style.display = 'none';
-    ui.mainMenu.style.display = 'flex';
+    GAME.mode = modeName; GAME.level = GAME.modeLevels[modeName] || 1;
+    ui.lobbyScreen.style.display = 'none'; ui.mainMenu.style.display = 'flex';
     let t = TRANSLATIONS[SETTINGS.language];
     let modeTitle = t.mode_classic_title;
-    if(modeName === 'reflex') modeTitle = t.mode_reflex_title;
-    if(modeName === 'hostage') modeTitle = t.mode_hostage_title;
-    if(modeName === 'defense') modeTitle = t.mode_defense_title; // Add Title
+    if(modeName === 'reflex') modeTitle = t.mode_reflex_title; if(modeName === 'hostage') modeTitle = t.mode_hostage_title; if(modeName === 'defense') modeTitle = t.mode_defense_title;
     ui.selectedModeDisplay.innerText = "MODE: " + modeTitle;
-    GAME.state = 'menu';
-    
-    // Ranks UI update based on new loaded level
-    updateRankUI();
-    
-    updateMenuStats(); 
-    SoundSys.buy();
+    GAME.state = 'menu'; updateRankUI(); updateMenuStats(); SoundSys.buy();
 }
-
-window.backToLobby = function() {
-    ui.mainMenu.style.display = 'none';
-    ui.lobbyScreen.style.display = 'flex';
-    GAME.state = 'lobby';
-    SoundSys.buy();
-}
-
+window.backToLobby = function() { ui.mainMenu.style.display = 'none'; ui.lobbyScreen.style.display = 'flex'; GAME.state = 'lobby'; SoundSys.buy(); }
 window.startGameFromMenu = function() {
-    ui.mainMenu.style.display = 'none';
-    ui.hudElements.forEach(el => el.style.display = 'flex');
-    GAME.state = 'tutorial';
-    ui.tutorialOverlay.style.display = 'flex';
-    const t = TRANSLATIONS[SETTINGS.language];
-
-    // Hide hostage panel by default
-    ui.hostagePanel.style.display = 'none';
-
-    // Customize tutorial text based on mode
-    if(GAME.mode === 'reflex') {
-        ui.tutObjective.innerText = t.tut_reflex;
-        ui.tutObjective.style.color = "#ef4444";
-    } else if (GAME.mode === 'hostage') {
-        GAME.hostagesSaved = 0;
-        renderHostageUI();
-        ui.hostagePanel.style.display = 'flex'; 
-        ui.tutObjective.innerText = t.tut_hostage;
-        ui.tutObjective.style.color = "#facc15";
-    } else if (GAME.mode === 'defense') {
-        // DEFENSE TUTORIAL TEXT
-        ui.tutObjective.innerText = t.tut_defense;
-        ui.tutObjective.style.color = "#ef4444";
-    } else {
-        ui.tutObjective.innerText = t.tut_classic;
-        ui.tutObjective.style.color = "#22c55e";
-    }
-    
+    ui.mainMenu.style.display = 'none'; ui.hudElements.forEach(el => el.style.display = 'flex'); GAME.state = 'tutorial'; ui.tutorialOverlay.style.display = 'flex';
+    const t = TRANSLATIONS[SETTINGS.language]; ui.hostagePanel.style.display = 'none';
+    if(GAME.mode === 'reflex') { ui.tutObjective.innerText = t.tut_reflex; ui.tutObjective.style.color = "#ef4444"; } 
+    else if (GAME.mode === 'hostage') { GAME.hostagesSaved = 0; renderHostageUI(); ui.hostagePanel.style.display = 'flex'; ui.tutObjective.innerText = t.tut_hostage; ui.tutObjective.style.color = "#facc15"; } 
+    else if (GAME.mode === 'defense') { ui.tutObjective.innerText = t.tut_defense; ui.tutObjective.style.color = "#ef4444"; } 
+    else { ui.tutObjective.innerText = t.tut_classic; ui.tutObjective.style.color = "#22c55e"; }
     SoundSys.buy();
 }
-
 function renderHostageUI() {
     ui.hostagePanel.innerHTML = '';
     for(let i=0; i<GAME.totalHostages; i++) {
-        const isSaved = i < GAME.hostagesSaved;
-        const div = document.createElement('div');
-        div.className = `hostage-icon ${isSaved ? 'saved' : ''}`;
-        // SVG: Simple Person Icon
-        div.innerHTML = `
-            <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M12 14c-6.1 0-8 4-8 4v2h16v-2s-1.9-4-8-4z" />
-            </svg>
-        `;
-        ui.hostagePanel.appendChild(div);
+        const isSaved = i < GAME.hostagesSaved; const div = document.createElement('div'); div.className = `hostage-icon ${isSaved ? 'saved' : ''}`;
+        div.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M12 14c-6.1 0-8 4-8 4v2h16v-2s-1.9-4-8-4z" /></svg>`; ui.hostagePanel.appendChild(div);
     }
 }
+window.closeTutorial = function() { ui.tutorialOverlay.style.display = 'none'; startLevel(GAME.level); GAME.state = 'playing'; GAME.lastTime = Date.now(); SoundSys.resume(); }
 
-window.closeTutorial = function() {
-    ui.tutorialOverlay.style.display = 'none';
-    startLevel(GAME.level); 
-    GAME.state = 'playing';
-    GAME.lastTime = Date.now();
-    SoundSys.resume();
-}
-
-// === EXIT MODAL FUNCTIONS ===
-window.openExitModal = function() {
-    GAME.isPaused = true;
-    ui.exitModal.style.display = 'flex';
-    SoundSys.blip(); // Audio feedback
-}
-
-window.closeExitModal = function() {
-    GAME.isPaused = false;
-    ui.exitModal.style.display = 'none';
-    GAME.lastTime = Date.now(); // Reset timer delta to prevent big jump
-}
+// === MODIFIED EXIT FUNCTIONS FOR CRAZYGAMES ===
+window.openExitModal = function() { GAME.isPaused = true; ui.exitModal.style.display = 'flex'; SoundSys.blip(); }
+window.closeExitModal = function() { GAME.isPaused = false; ui.exitModal.style.display = 'none'; GAME.lastTime = Date.now(); }
 
 window.confirmExit = function() {
-    closeExitModal();
-    const t = TRANSLATIONS[SETTINGS.language];
-    
-    // SKOR KAYIT MEKANİZMASI
-    // Maçtan her çıkışta mevcut toplam skoru liderlik tablosuna gönderir
-    if (!isGuest && currentUserDoc) {
-        window.addScore(currentUserDoc, GAME.stats.totalScore);
-        
-        // Görsel Geri Bildirim
-        ui.notify.innerText = t.msg_score_saved;
-        ui.notify.style.color = "#22c55e";
-        ui.notify.style.opacity = 1;
-        setTimeout(() => { ui.notify.style.opacity = 0; }, 2000);
-    }
+    // 1. Close modal immediately
+    window.closeExitModal();
 
-    // Return to Main Menu (Loadout Screen)
-    GAME.state = 'menu';
-    ui.hudElements.forEach(el => el.style.display = 'none');
-    ui.mainMenu.style.display = 'flex';
-    
-    // Clean up game objects
-    bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = [];
-    
-    updateMenuStats(); 
-    window.saveGame(); // İlerlemeyi (para, level vb.) buluta ve yerele kaydet
-    SoundSys.buy();
+    // 2. Define the cleanup and menu transition logic as a callback
+    const performExit = () => {
+        const t = TRANSLATIONS[SETTINGS.language];
+        
+        // Save score logic
+        if (!isGuest && currentUserDoc) {
+            window.addScore(currentUserDoc, GAME.stats.totalScore);
+            ui.notify.innerText = t.msg_score_saved;
+            ui.notify.style.color = "#22c55e";
+            ui.notify.style.opacity = 1;
+            setTimeout(() => { ui.notify.style.opacity = 0; }, 2000);
+        }
+
+        // Return to Menu
+        GAME.state = 'menu';
+        ui.hudElements.forEach(el => el.style.display = 'none');
+        ui.mainMenu.style.display = 'flex';
+        
+        // Reset Game Objects
+        bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = []; defenseEnemies = [];
+        
+        updateMenuStats(); 
+        window.saveGame();
+        SoundSys.buy();
+    };
+
+    // 3. Trigger Ad, then run performExit
+    window.triggerCrazyGamesAd(performExit);
 }
 
 // Audio System
 const actx = new (window.AudioContext || window.webkitAudioContext)();
 const SoundSys = {
     resume: () => { if(actx.state === 'suspended') actx.resume(); },
-    shoot: (silenced) => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        const isMagnum = GAME.currentWeapon === 'magnum';
-        const isFN57 = GAME.currentWeapon === 'fn57';
-        let baseFreq = silenced ? 150 : 220; let endFreq = 40; let vol = silenced ? 0.3 : 0.8; let decay = 0.15;
-        if(isMagnum) { baseFreq = 100; endFreq = 20; vol = 1.0; decay = 0.3; osc.type = 'square'; } 
-        else if (isFN57) { baseFreq = 280; endFreq = 60; vol = 0.7; decay = 0.1; osc.type = silenced ? 'sine' : 'sawtooth'; } 
-        else { osc.type = silenced ? 'sine' : 'triangle'; }
-        osc.frequency.setValueAtTime(baseFreq, t); osc.frequency.exponentialRampToValueAtTime(endFreq, t+decay);
-        g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.01, t+decay);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+decay);
-    },
-    buy: () => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        osc.type = 'sine'; osc.frequency.setValueAtTime(800, t); osc.frequency.linearRampToValueAtTime(1200, t+0.1);
-        g.gain.setValueAtTime(0.3, t); g.gain.linearRampToValueAtTime(0, t+0.1);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.2);
-    },
-    reload: () => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, t); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.1);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1);
-    },
-    impact: () => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.1);
-        g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.1);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1);
-    },
+    shoot: (silenced) => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); const isMagnum = GAME.currentWeapon === 'magnum'; const isFN57 = GAME.currentWeapon === 'fn57'; let baseFreq = silenced ? 150 : 220; let endFreq = 40; let vol = silenced ? 0.3 : 0.8; let decay = 0.15; if(isMagnum) { baseFreq = 100; endFreq = 20; vol = 1.0; decay = 0.3; osc.type = 'square'; } else if (isFN57) { baseFreq = 280; endFreq = 60; vol = 0.7; decay = 0.1; osc.type = silenced ? 'sine' : 'sawtooth'; } else { osc.type = silenced ? 'sine' : 'triangle'; } osc.frequency.setValueAtTime(baseFreq, t); osc.frequency.exponentialRampToValueAtTime(endFreq, t+decay); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.01, t+decay); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+decay); },
+    buy: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(800, t); osc.frequency.linearRampToValueAtTime(1200, t+0.1); g.gain.setValueAtTime(0.3, t); g.gain.linearRampToValueAtTime(0, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.2); },
+    reload: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, t); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1); },
+    impact: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.1); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1); },
     shell: () => { if(SETTINGS.graphics === 'low') return; setTimeout(()=>{ SoundSys.resume(); const t=actx.currentTime; const osc=actx.createOscillator(); const g=actx.createGain(); osc.frequency.setValueAtTime(1200,t); osc.frequency.exponentialRampToValueAtTime(800,t+0.05); g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.05); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.05); }, 200); },
     boxDrop: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='square'; osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.3); g.gain.setValueAtTime(0.5, t); g.gain.linearRampToValueAtTime(0, t+0.3); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.3); },
     levelup: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='triangle'; osc.frequency.setValueAtTime(440, t); osc.frequency.setValueAtTime(554, t+0.1); osc.frequency.setValueAtTime(659, t+0.2); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.6); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.6); },
@@ -1308,1360 +1055,86 @@ const SoundSys = {
     blip: () => { SoundSys.resume(); const t=actx.currentTime; const osc=actx.createOscillator(); const g=actx.createGain(); osc.frequency.setValueAtTime(600, t); osc.type='sine'; g.gain.setValueAtTime(0.1, t); g.gain.linearRampToValueAtTime(0, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1); }
 };
 
-function init() {
-    // Show Auth Modal First, don't just loop
-    resize();
-    window.addEventListener('resize', resize);
-    window.addEventListener('mousemove', e => { 
-        if (!containerRect) return; 
-        const scaleX = canvas.width / containerRect.width;
-        const scaleY = canvas.height / containerRect.height;
-        mouse.x = (e.clientX - containerRect.left) * scaleX;
-        mouse.y = (e.clientY - containerRect.top) * scaleY;
-        
-        if(GAME.state === 'menu' || GAME.state === 'lobby') {
-            const cx = width / 2;
-            const cy = height / 2;
-            const dx = mouse.x - cx;
-            menuRotation = (dx / width) * 0.5; 
-        }
-    });
-    window.addEventListener('mousedown', handleClick);
-    window.addEventListener('keydown', e => { 
-        SoundSys.resume(); 
-        if (e.key.toLowerCase() === 'r') reload(); 
-        
-        if (e.key === 'Escape') {
-            if (GAME.state === 'playing') {
-                if (GAME.isPaused) {
-                    window.closeExitModal();
-                } else {
-                    window.openExitModal();
-                }
-            } else if (GAME.state === 'menu' && !ui.storeModal.style.display.includes('flex') && !GAME.isSettingsOpen && !GAME.isPromoOpen && !ui.leaderboardModal.style.display.includes('flex')) {
-                // Optional: Back to lobby from menu if ESC pressed
-                // backToLobby();
-            } else if (GAME.isStoreOpen) { window.toggleStore(); }
-            else if (GAME.isWeaponStoreOpen) { window.toggleWeaponStore(); }
-            else if (GAME.isProfileOpen) { window.toggleProfile(); }
-            else if (GAME.isRankInfoOpen) { window.toggleRankInfo(); }
-            else if (GAME.isSettingsOpen) { window.toggleSettings(); }
-            else if (GAME.isPromoOpen) { window.togglePromo(); }
-            else if (ui.leaderboardModal.style.display === 'flex') { window.toggleLeaderboard(); }
-        }
-    });
-    
-    // NOTE: Game is started via auth buttons now, loop is called there
-    requestAnimationFrame(loop);
-}
-
-function initGameUI() {
-    // Set UI values from loaded settings
-    ui.langSelect.value = SETTINGS.language;
-    ui.resSelect.value = SETTINGS.resolution;
-    ui.gfxSelect.value = SETTINGS.graphics;
-    
-    // Ensure Gun Data matches loaded save
-    if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity;
-    GUN.ammo = GUN.maxAmmo;
-    
-    window.updateLanguageUI();
-    updateUI();
-    updateRankUI();
-    currentFullRankName = getFullRankName();
-    updateMenuStats();
-    
-    // Trigger loop if not running? Loop is running but state handles drawing
-}
-
-function updateMenuStats() {
-    ui.menuDmgLevel.innerText = "LVL " + GAME.weaponLevel;
-    ui.menuBalance.innerText = GAME.coins + " $";
-}
-
-window.triggerMenuUpgrade = function() {
-    if(GAME.coins >= 1000) {
-        GAME.coins -= 1000;
-        GAME.weaponLevel++;
-        updateMenuStats();
-        updateUI();
-        window.saveGame();
-        SoundSys.levelup();
-        const btn = document.querySelector('.menu-card.highlight');
-        btn.style.borderColor = '#22c55e';
-        setTimeout(() => btn.style.borderColor = '#3b82f6', 300);
-    } else {
-        const btn = document.querySelector('.menu-card.highlight');
-        btn.style.borderColor = '#ef4444';
-        setTimeout(() => btn.style.borderColor = '#3b82f6', 300);
-        SoundSys.error();
-    }
-}
-
-window.toggleAttachment = function(type) {
-    if(GAME.state !== 'playing' || GAME.isPaused) return;
-    GUN.attachments[type] = !GUN.attachments[type];
-    const btn = document.querySelector(`.attachment-btn[title*="${type === 'scope' ? 'Nişangah' : (type === 'silencer' ? 'Susturucu' : 'Lazer')}"]`);
-    if(btn) { if(GUN.attachments[type]) btn.classList.add('active'); else btn.classList.remove('active'); }
-}
-
-function getRankData() {
-    for(let i=0; i<RANK_SYSTEM.length; i++) {
-        const r = RANK_SYSTEM[i];
-        if(GAME.level >= r.min && GAME.level <= r.max) return { ...r, index: i };
-    }
-    return { ...RANK_SYSTEM[RANK_SYSTEM.length-1], index: RANK_SYSTEM.length-1 };
-}
-
-function getTierIndex(rankData) { 
-    const totalLevelsInRank = rankData.max - rankData.min + 1;
-    const currentLevelInRank = GAME.level - rankData.min;
-    const levelsPerTier = totalLevelsInRank / 4;
-    return Math.floor(currentLevelInRank / levelsPerTier); 
-}
-
-function getFullRankName() {
-    const rank = getRankData(); 
-    if(rank.index >= RANK_SYSTEM.length - 1) return rank.name;
-    const tierIdx = Math.min(3, getTierIndex(rank));
-    return `${rank.name} ${SUB_RANKS[tierIdx]}`;
-}
-
-function updateRankUI() {
-    const currentRank = getRankData();
-    const isMax = currentRank.index >= RANK_SYSTEM.length - 1;
-    const tierIdx = isMax ? 0 : Math.min(3, getTierIndex(currentRank));
-    const subRank = isMax ? "MAX" : SUB_RANKS[tierIdx];
-    
-    // In-Game Panel Updates
-    ui.rankTitle.innerText = currentRank.name;
-    ui.rankTitle.style.color = currentRank.color;
-    ui.rankTitle.style.textShadow = `0 0 15px ${currentRank.color}`;
-    ui.rankSub.innerText = isMax ? "MAX RANK" : `TIER ${subRank}`;
-    ui.rankSub.style.color = currentRank.color;
-    ui.currentRankIcon.innerHTML = `<path d="${currentRank.icon}"/>`;
-    ui.currentRankIcon.style.fill = currentRank.color;
-    ui.currentRankIcon.style.filter = `drop-shadow(0 0 8px ${currentRank.color})`;
-    ui.rankPanel.style.borderLeftColor = currentRank.color;
-
-    // NEW: Menu Widget Updates
-    if(ui.menuRankWidget) {
-        ui.menuRankWidget.style.borderRightColor = currentRank.color;
-        ui.menuRankIcon.innerHTML = `<path d="${currentRank.icon}"/>`;
-        ui.menuRankIcon.style.fill = currentRank.color;
-        ui.menuRankName.innerText = currentRank.name;
-        ui.menuRankName.style.color = currentRank.color;
-    }
-
-    if(isMax) {
-        ui.rankProgressBar.style.width = '100%';
-        ui.rankProgressBar.style.backgroundColor = currentRank.color;
-        ui.rankProgressText.innerText = "MAX LEVEL";
-    } else {
-        const totalLevelsInRank = currentRank.max - currentRank.min + 1;
-        const currentLevelInRank = GAME.level - currentRank.min;
-        const percent = Math.min(100, (currentLevelInRank / totalLevelsInRank) * 100);
-        ui.rankProgressBar.style.width = `${percent}%`;
-        ui.rankProgressBar.style.backgroundColor = currentRank.color;
-        const txtNext = TRANSLATIONS[SETTINGS.language].next_rank || 'NEXT';
-        ui.rankProgressText.innerText = `${txtNext}: ${currentRank.max + 1 - GAME.level} LVL`;
-    }
-}
-
-function triggerRankUpAnim(newRankName, rewardAmount) {
-    const t = TRANSLATIONS[SETTINGS.language];
-    RANK_UP_ANIM.active = true; RANK_UP_ANIM.timer = 200; 
-    RANK_UP_ANIM.text = t.msg_rankup; RANK_UP_ANIM.subText = newRankName; 
-    RANK_UP_ANIM.rewardText = `+${rewardAmount} $ ${t.msg_reward}`;
-    SoundSys.rankup();
-}
-
-function startLevel(lvl) {
-    GAME.level = lvl; ui.levelText.innerText = `LVL ${lvl}`;
-    const rankData = getRankData();
-    const newRankName = getFullRankName();
-    
-    if(newRankName !== currentFullRankName && lvl > 1) { 
-        const reward = rankData.reward;
-        if (reward > 0) { GAME.coins += reward; triggerRankUpAnim(newRankName, reward); } 
-        else { triggerRankUpAnim(newRankName, 0); }
-        currentFullRankName = newRankName; 
-    }
-    
-    updateRankUI(); 
-    window.saveGame();
-    wallBlocks = []; bullets = []; reflexTargets = []; defenseEnemies = [];
-    
-    if(GAME.mode === 'classic') {
-        const maxRows = Math.min(25, 4 + Math.floor(lvl / 2));
-        const maxCols = Math.min(8, 2 + Math.floor(lvl / 10));
-        const baseHealth = 15 + (lvl * 5);
-        const blockSize = height / 25;
-        const wallX = width - (width * 0.2) - (maxCols * blockSize);
-        const startY = (height - (maxRows * blockSize)) / 2;
-        for (let c = 0; c < maxCols; c++) {
-            for (let r = 0; r < maxRows; r++) {
-                const isMetal = Math.random() > 0.7;
-                let hp = baseHealth + (Math.random() * 5);
-                if(isMetal) hp *= 1.5;
-                wallBlocks.push({x: wallX + (c * blockSize), y: startY + (r * blockSize), size: blockSize, active: true, type: isMetal ? 'metal' : 'wood', hp: hp, maxHp: hp});
-            }
-        }
-        const timePerBlock = Math.max(0.8, 2.5 - (lvl * 0.03)); 
-        GAME.maxTime = Math.ceil(wallBlocks.length * timePerBlock) + 5; 
-    } else if (GAME.mode === 'reflex') {
-        GAME.targetsToHit = 10 + Math.floor(lvl * 1.5);
-        GAME.targetsHit = 0;
-        GAME.maxTime = 30 + (lvl * 2); 
-        reflexSpawnTimer = 0;
-    } else if (GAME.mode === 'hostage') {
-        GAME.targetsToHit = 5 + lvl + Math.floor(lvl/2); 
-        GAME.targetsHit = 0;
-        GAME.maxTime = 25; 
-        reflexSpawnTimer = 0;
-    } else if (GAME.mode === 'defense') {
-        GAME.targetsToHit = 10 + Math.floor(lvl * 2); 
-        GAME.targetsHit = 0;
-        GAME.maxTime = 60 + (lvl * 5); 
-        defenseSpawnTimer = 0;
-    }
-
-    GAME.timer = GAME.maxTime; GAME.lastTime = Date.now(); GAME.hitStreak = 0;
-    updateTimerUI();
-    updateUI();
-}
-
-function gameOver(reason) {
-    const t = TRANSLATIONS[SETTINGS.language];
-    GAME.state = 'gameover';
-    
-    // AUTO SAVE SCORE ON GAME OVER (IF NOT GUEST)
-    // Requirement: Call addScore when player finishes game
-    if (!isGuest && currentUserDoc) {
-        // We use GAME.stats.totalScore as the leaderboard metric (lifetime score)
-        // Or GAME.score (current run score)? Usually leaderboards are best run or total accumulated.
-        // Based on "Global Ops" style, let's use Total Lifetime Score for rank/prestige
-        window.addScore(currentUserDoc, GAME.stats.totalScore);
-    }
-
-    if(reason === 'breach') {
-        ui.notify.innerText = t.msg_breach;
-    } else {
-        ui.notify.innerText = t.msg_timeup; 
-    }
-    
-    ui.notify.style.color = "#ef4444"; ui.notify.style.opacity = 1; SoundSys.error();
-    setTimeout(() => {
-        ui.notify.style.opacity = 0; ui.notify.style.color = "#fff";
-        startLevel(GAME.level); GAME.state = 'playing';
-    }, 2000);
-}
-
-function updateTimerUI() {
-    ui.timerDisplay.innerText = GAME.timer.toFixed(1);
-    ui.timerDisplay.style.color = GAME.timer < 5 ? '#fff' : '#ef4444';
-}
-
-function updateUI() {
-    ui.ammoCount.innerText = GUN.ammo;
-    ui.ammoBar.style.width = `${(GUN.ammo/GUN.maxAmmo)*100}%`;
-    ui.scoreDisplay.innerText = GAME.score;
-    ui.coinDisplay.innerText = GAME.coins + " $";
-    ui.weaponLevelText.innerText = "LVL " + GAME.weaponLevel;
-    const skinName = SKINS[GAME.currentSkin] ? SKINS[GAME.currentSkin].name : "Factory New";
-    const weaponName = WEAPONS[GAME.currentWeapon] ? WEAPONS[GAME.currentWeapon].name : "UNKNOWN";
-    ui.gunName.innerText = weaponName.toUpperCase() + " | " + skinName.toUpperCase();
-}
-
-window.toggleStore = function() {
-    GAME.isStoreOpen = !GAME.isStoreOpen;
-    ui.storeModal.style.display = GAME.isStoreOpen ? 'flex' : 'none';
-    if(GAME.isStoreOpen) { 
-        if(GAME.isRankInfoOpen) window.toggleRankInfo(); 
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
-        if(GAME.isProfileOpen) window.toggleProfile();
-        if(GAME.isSettingsOpen) window.toggleSettings();
-        if(GAME.isPromoOpen) window.togglePromo();
-        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        renderStore();
-        requestAnimationFrame(renderPreviews);
-    }
-}
-
-window.toggleWeaponStore = function() {
-    GAME.isWeaponStoreOpen = !GAME.isWeaponStoreOpen;
-    ui.weaponModal.style.display = GAME.isWeaponStoreOpen ? 'flex' : 'none';
-    if(GAME.isWeaponStoreOpen) { 
-        if(GAME.isRankInfoOpen) window.toggleRankInfo(); 
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isProfileOpen) window.toggleProfile();
-        if(GAME.isSettingsOpen) window.toggleSettings();
-        if(GAME.isPromoOpen) window.togglePromo();
-        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        renderWeaponStore(); 
-        requestAnimationFrame(renderPreviews);
-    }
-}
-
-window.toggleRankInfo = function() {
-    GAME.isRankInfoOpen = !GAME.isRankInfoOpen;
-    ui.rankInfoModal.style.display = GAME.isRankInfoOpen ? 'flex' : 'none';
-    if(GAME.isRankInfoOpen) { 
-        if(GAME.isStoreOpen) window.toggleStore(); 
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
-        if(GAME.isProfileOpen) window.toggleProfile();
-        if(GAME.isSettingsOpen) window.toggleSettings();
-        if(GAME.isPromoOpen) window.togglePromo();
-        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        renderRankInfo(); 
-    }
-}
-
-window.toggleProfile = function() {
-    GAME.isProfileOpen = !GAME.isProfileOpen;
-    ui.profileModal.style.display = GAME.isProfileOpen ? 'flex' : 'none';
-    if(GAME.isProfileOpen) {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
-        if(GAME.isRankInfoOpen) window.toggleRankInfo();
-        if(GAME.isSettingsOpen) window.toggleSettings();
-        if(GAME.isPromoOpen) window.togglePromo();
-        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        renderProfile();
-    }
-}
-
-// NEW SETTINGS FUNCTIONS
-window.toggleSettings = function() {
-    GAME.isSettingsOpen = !GAME.isSettingsOpen;
-    ui.settingsModal.style.display = GAME.isSettingsOpen ? 'flex' : 'none';
-    if(GAME.isSettingsOpen) {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
-        if(GAME.isRankInfoOpen) window.toggleRankInfo();
-        if(GAME.isProfileOpen) window.toggleProfile();
-        if(GAME.isPromoOpen) window.togglePromo();
-        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-    }
-}
-
-// NEW PROMO FUNCTIONS
-window.togglePromo = function() {
-    GAME.isPromoOpen = !GAME.isPromoOpen;
-    ui.promoModal.style.display = GAME.isPromoOpen ? 'flex' : 'none';
-    ui.promoResult.innerText = "";
-    ui.promoInput.value = "";
-    
-    if(GAME.isPromoOpen) {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
-        if(GAME.isRankInfoOpen) window.toggleRankInfo();
-        if(GAME.isProfileOpen) window.toggleProfile();
-        if(GAME.isSettingsOpen) window.toggleSettings();
-        if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        setTimeout(() => ui.promoInput.focus(), 100);
-    }
-}
-
-window.submitPromoCode = function() {
-    const code = ui.promoInput.value.trim().toLowerCase();
-    const t = TRANSLATIONS[SETTINGS.language];
-    
-    if(!code) return;
-    
-    if(code === "masterfc") {
-        if(GAME.redeemedCodes.includes("masterfc")) {
-            ui.promoResult.innerText = t.msg_code_used;
-            ui.promoResult.style.color = "#ef4444";
-            SoundSys.error();
-        } else {
-            GAME.coins += 20000;
-            GAME.redeemedCodes.push("masterfc");
-            updateUI();
-            updateMenuStats();
-            window.saveGame();
-            
-            ui.promoResult.innerText = t.msg_code_success;
-            ui.promoResult.style.color = "#22c55e";
-            SoundSys.rankup();
-            
-            // Auto close after success
-            setTimeout(() => { if(GAME.isPromoOpen) window.togglePromo(); }, 1500);
-        }
-    } else {
-        ui.promoResult.innerText = t.msg_code_invalid;
-        ui.promoResult.style.color = "#ef4444";
-        SoundSys.error();
-    }
-}
-
-window.changeLanguage = function(lang) {
-    SETTINGS.language = lang;
-    window.updateLanguageUI();
-    window.saveGame();
-}
-
-window.updateLanguageUI = function() {
-    const t = TRANSLATIONS[SETTINGS.language];
-    document.querySelectorAll('[data-lang]').forEach(el => {
-        const key = el.getAttribute('data-lang');
-        if (t[key]) {
-             if(el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
-                 el.innerText = t[key];
-             } else {
-                 el.innerHTML = t[key];
-             }
-        }
-    });
-}
-
-window.changeResolution = function(res) {
-    SETTINGS.resolution = res;
-    resize();
-    window.saveGame();
-}
-
-window.changeGraphics = function(gfx) {
-    SETTINGS.graphics = gfx;
-    window.saveGame();
-}
-
-function renderStore() {
-    ui.storeList.innerHTML = '';
-    const t = TRANSLATIONS[SETTINGS.language];
-    const btnTextBuy = t.buy || 'BUY';
-    const btnTextEquip = t.equip || 'EQUIP';
-    const btnTextEquipped = t.equipped || 'EQUIPPED';
-    
-    Object.values(SKINS).forEach(skin => {
-        const isOwned = GAME.ownedSkins.includes(skin.id);
-        const isActive = (skin.type === 'gun' && GAME.currentSkin === skin.id) || (skin.type === 'silencer' && GAME.currentSilencer === skin.id);
-        const card = document.createElement('div');
-        card.className = `item-card ${isActive ? 'active' : ''}`;
-        
-        // Button Logic Construction
-        let btnHTML = '';
-        if (isOwned) {
-            if (isActive) {
-                btnHTML = `<button class="action-btn btn-equipped" onclick="window.equipSkin('${skin.id}')">${btnTextEquipped}</button>`;
-            } else {
-                btnHTML = `<button class="action-btn btn-equip" onclick="window.equipSkin('${skin.id}')">${btnTextEquip}</button>`;
-            }
-        } else {
-            btnHTML = `<button class="action-btn btn-buy" onclick="window.buySkin('${skin.id}')">${btnTextBuy}</button>`;
-        }
-
-        card.innerHTML = `
-            <div class="skin-preview-box">
-                <canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas>
-            </div>
-            <div style="font-weight:bold; color:#fff">${skin.name}</div>
-            <div style="color:#eab308; margin-bottom:5px;">${skin.price} $</div>
-            ${btnHTML}
-        `;
-        ui.storeList.appendChild(card);
-    });
-}
-
-function renderWeaponStore() {
-    ui.weaponList.innerHTML = '';
-    const t = TRANSLATIONS[SETTINGS.language];
-    const btnTextBuy = t.buy || 'BUY';
-    const btnTextEquip = t.equip || 'EQUIP';
-    const btnTextEquipped = t.equipped || 'EQUIPPED';
-
-    Object.keys(WEAPONS).forEach(key => {
-        const w = WEAPONS[key];
-        const isOwned = GAME.ownedWeapons.includes(key);
-        const isActive = GAME.currentWeapon === key;
-        const card = document.createElement('div');
-        card.className = `item-card ${isActive ? 'active' : ''}`;
-        card.style.borderColor = isActive ? '#3b82f6' : '#333';
-        
-        let btnHTML = '';
-        if (isOwned) {
-            if (isActive) {
-                btnHTML = `<button class="action-btn" style="background:#333; color:#777" onclick="window.equipWeapon('${key}')">${btnTextEquipped}</button>`;
-            } else {
-                btnHTML = `<button class="action-btn" style="background:#3b82f6; color:white" onclick="window.equipWeapon('${key}')">${btnTextEquip}</button>`;
-            }
-        } else {
-             btnHTML = `<button class="action-btn" style="background:#eab308; color:black" onclick="window.buyWeapon('${key}')">${btnTextBuy}</button>`;
-        }
-
-        card.innerHTML = `
-            <div class="skin-preview-box" style="border-color:${isActive?'#3b82f6':'#333'}">
-                <canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas>
-            </div>
-            <div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div>
-            <div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div>
-            <div style="color:#3b82f6; margin-bottom:5px; font-weight:bold;">${w.price} $</div>
-            ${btnHTML}
-        `;
-        ui.weaponList.appendChild(card);
-    });
-}
-
-// GLOBAL WINDOW FUNCTIONS FOR BUY/EQUIP (Ensures accessibility from HTML onclick)
-window.buySkin = (id) => {
-    const s = SKINS[id];
-    if(GAME.coins >= s.price) {
-        GAME.coins -= s.price; 
-        GAME.ownedSkins.push(id); 
-        
-        // Auto Equip logic based on type
-        if(s.type === 'silencer') GAME.currentSilencer = id; 
-        else GAME.currentSkin = id;
-        
-        updateUI(); 
-        updateMenuStats(); // EKLENDİ: Menüdeki parayı anlık güncelle
-        renderStore(); // Re-render to update buttons
-        window.saveGame(); 
-        SoundSys.buy(); 
-        requestAnimationFrame(renderPreviews);
-    } else { 
-        ui.coinDisplay.classList.add('no-money'); 
-        setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); 
-        SoundSys.error();
-    }
-}
-
-window.equipSkin = (id) => { 
-    const s = SKINS[id]; 
-    if(s.type === 'silencer') GAME.currentSilencer = id; 
-    else GAME.currentSkin = id; 
-    
-    renderStore(); 
-    window.saveGame(); 
-    SoundSys.buy(); 
-    updateUI(); 
-    requestAnimationFrame(renderPreviews); 
-}
-
-window.buyWeapon = (key) => {
-    const w = WEAPONS[key];
-    if(GAME.coins >= w.price) {
-        GAME.coins -= w.price; 
-        GAME.ownedWeapons.push(key); 
-        GAME.currentWeapon = key; 
-        GUN.maxAmmo = w.capacity; 
-        GUN.ammo = w.capacity; 
-        
-        updateUI(); 
-        updateMenuStats(); // EKLENDİ: Menüdeki parayı anlık güncelle
-        renderWeaponStore(); 
-        window.saveGame(); 
-        SoundSys.buy(); 
-        requestAnimationFrame(renderPreviews);
-    } else { 
-        ui.coinDisplay.classList.add('no-money'); 
-        setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); 
-        SoundSys.error();
-    }
-}
-
-window.equipWeapon = (key) => { 
-    GAME.currentWeapon = key; 
-    const w = WEAPONS[key]; 
-    GUN.maxAmmo = w.capacity; 
-    GUN.ammo = w.capacity; 
-    
-    renderWeaponStore(); 
-    window.saveGame(); 
-    SoundSys.buy(); 
-    updateUI(); 
-    requestAnimationFrame(renderPreviews); 
-}
-
-window.triggerUpgradeAnim = () => {
-    if(GAME.state !== 'playing' || UPGRADE.active) return;
-    if(GAME.coins >= 1000) {
-        GAME.coins -= 1000; updateUI(); UPGRADE.active = true; UPGRADE.phase = 0; UPGRADE.timer = 0; UPGRADE.boxY = -100; UPGRADE.boxScale = 1; UPGRADE.glow = 0; UPGRADE.particles = [];
-    } else { ui.coinDisplay.classList.add('no-money'); setTimeout(()=> ui.coinDisplay.classList.remove('no-money'), 400); }
-}
-
-function updateUpgradeAnim() {
-    UPGRADE.timer++; const cx = width / 2; const cy = height / 2;
-    if(UPGRADE.phase === 0) { UPGRADE.boxY += (cy - UPGRADE.boxY) * 0.15; if(Math.abs(cy - UPGRADE.boxY) < 5) { UPGRADE.phase = 1; UPGRADE.timer = 0; SoundSys.boxDrop(); } } 
-    else if(UPGRADE.phase === 1) { UPGRADE.boxScale = 1 + Math.sin(UPGRADE.timer * 0.8) * 0.05; if(UPGRADE.timer > 60) { UPGRADE.phase = 2; UPGRADE.timer = 0; SoundSys.levelup(); 
-        if(SETTINGS.graphics !== 'low') {
-            for(let i=0; i<30; i++) UPGRADE.particles.push({x: cx, y: cy, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1, color: Math.random()>0.5?'#eab308':'#fff'}); 
-        }
-        GAME.weaponLevel++; updateUI(); window.saveGame(); } } 
-    else if(UPGRADE.phase === 2) { if(UPGRADE.timer > 120) UPGRADE.active = false; }
-}
-
-function drawUpgradeEffect() {
-    const t = TRANSLATIONS[SETTINGS.language];
-    const cx = width/2; const cy = height/2; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,width,height);
-    if(UPGRADE.phase <= 1) { ctx.save(); ctx.translate(cx, UPGRADE.boxY); if(UPGRADE.phase === 1) ctx.rotate((Math.random()-0.5)*0.1); ctx.scale(UPGRADE.boxScale, UPGRADE.boxScale); ctx.fillStyle = '#444'; ctx.fillRect(-40, -30, 80, 60); ctx.fillStyle = '#555'; ctx.fillRect(-35, -25, 70, 50); ctx.fillStyle = '#eab308'; ctx.fillRect(-40, -5, 80, 10); ctx.fillRect(-10, -30, 20, 60); ctx.restore(); }
-    if(UPGRADE.phase === 2) { 
-        if(SETTINGS.graphics !== 'low') {
-            UPGRADE.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.02; if(p.life>0) { ctx.globalAlpha = p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, 5, 5); } }); ctx.globalAlpha = 1; 
-        }
-        const floatY = cy - Math.min(UPGRADE.timer * 2, 50); const scale = Math.min(UPGRADE.timer * 0.1, 2); ctx.save(); ctx.translate(cx, floatY); ctx.scale(scale, scale); ctx.shadowColor = '#eab308'; ctx.shadowBlur = 20; ctx.strokeStyle = '#eab308'; ctx.lineWidth = 3; ctx.beginPath(); for(let i=0; i<10; i++) { ctx.moveTo(-15, -20 + i*5); ctx.lineTo(15, -18 + i*5); ctx.lineTo(-15, -15 + i*5); } ctx.stroke(); ctx.fillStyle = '#fff'; ctx.fillRect(-2, -25, 4, 55); ctx.restore(); ctx.shadowBlur = 0; ctx.save(); ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = "bold 40px Segoe UI"; ctx.fillText(t.msg_upgraded, cx, cy + 80); ctx.font = "20px Segoe UI"; ctx.fillStyle = "#eab308"; ctx.fillText(t.msg_dmg_added, cx, cy + 110); ctx.restore(); }
-}
-
-function handleClick() {
-    if(GAME.state === 'menu' || GAME.state === 'lobby') return; // Click handled by UI
-    if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex') return;
-    SoundSys.resume(); if(GUN.reloading) return; if(GUN.ammo <= 0) { reload(); return; }
-    const now = Date.now(); if(now - GUN.lastShot > 110) { shoot(); GUN.lastShot = now; }
-}
-
-function shoot() {
-    GUN.ammo--; updateUI(); SoundSys.shoot(GUN.attachments.silencer); const rMod = GUN.attachments.silencer ? 0.8 : 1.0;
-    const weaponData = WEAPONS[GAME.currentWeapon]; const dmgMult = weaponData.damage || 1;
-    let baseRecoil = 20; let baseAngle = -0.15;
-    if(GAME.currentWeapon === 'beretta') { baseRecoil = 25; baseAngle = -0.18; } if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
-    
-    // Recoil affects gun visual, but we separate bullet path now for accuracy
-    GUN.recoilX = baseRecoil * rMod; 
-    GUN.recoilAngle = baseAngle * rMod; 
-    GUN.slideOffset = (GAME.currentWeapon === 'magnum') ? 40 : 25; 
-    
-    const barrelLen = GUN.attachments.silencer ? 95 : 70; 
-    
-    // Visual Angle (Gun muzzle position includes recoil)
-    const visualAngle = GUN.angle + GUN.recoilAngle * 0.5; 
-    const nX = (GUN.x - GUN.recoilX*0.5) + Math.cos(visualAngle) * barrelLen; 
-    const nY = GUN.y + Math.sin(visualAngle) * barrelLen; 
-    
-    // Fire Angle (Bullet path is STRICTLY aiming angle, ignoring recoil lift)
-    // This fixes the "shooting high" issue.
-    const fireAngle = GUN.angle; 
-
-    // Reduced spread for better accuracy
-    let spread = (Math.random()-0.5) * 0.015; 
-    if(GUN.attachments.scope) spread = 0; // Perfect accuracy with scope
-
-    const damage = (45 + (GAME.weaponLevel - 1) * 10) * dmgMult;
-    
-    // NEW LOGIC: Bullet Speed Adjustment
-    let bulletSpeed = 30; // Default
-    // Reflex ve Hostage modlarında mermi çok daha hızlı gitmeli (targets disappear fast)
-    if(GAME.mode === 'reflex' || GAME.mode === 'hostage') {
-        bulletSpeed = 80; // Significant increase to ensure it reaches targets in time
-    }
-
-    bullets.push({
-        x: nX, 
-        y: nY, 
-        vx: Math.cos(fireAngle + spread) * bulletSpeed, 
-        vy: Math.sin(fireAngle + spread) * bulletSpeed, 
-        prevX: nX, 
-        prevY: nY, 
-        active: true, 
-        power: damage
-    }); 
-    
-    shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); SoundSys.shell(); 
-    if(!GUN.attachments.silencer && SETTINGS.graphics !== 'low') { flashTimer = 3; flashPos = {x:nX, y:nY, angle:visualAngle}; }
-}
-
-function reload() {
-    if(GUN.reloading || GUN.ammo === GUN.maxAmmo) return;
-    if(GAME.coins < GAME.reloadCost) { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); return; }
-    GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: 15, height: 35 }); SoundSys.reload(); setTimeout(() => { GUN.ammo = GUN.maxAmmo; GUN.reloading = false; updateUI(); }, wData.reloadTime);
-}
-
+// ... OTHER GLOBAL FUNCTIONS (Resize, UpdateUI, etc) ...
+function init() { resize(); window.addEventListener('resize', resize); window.addEventListener('mousemove', e => { if (!containerRect) return; const scaleX = canvas.width / containerRect.width; const scaleY = canvas.height / containerRect.height; mouse.x = (e.clientX - containerRect.left) * scaleX; mouse.y = (e.clientY - containerRect.top) * scaleY; if(GAME.state === 'menu' || GAME.state === 'lobby') { const cx = width / 2; const cy = height / 2; const dx = mouse.x - cx; menuRotation = (dx / width) * 0.5; } }); window.addEventListener('mousedown', handleClick); window.addEventListener('keydown', e => { SoundSys.resume(); if (e.key.toLowerCase() === 'r') reload(); if (e.key === 'Escape') { if (GAME.state === 'playing') { if (GAME.isPaused) { window.closeExitModal(); } else { window.openExitModal(); } } else if (GAME.isStoreOpen) { window.toggleStore(); } else if (GAME.isWeaponStoreOpen) { window.toggleWeaponStore(); } else if (GAME.isProfileOpen) { window.toggleProfile(); } else if (GAME.isRankInfoOpen) { window.toggleRankInfo(); } else if (GAME.isSettingsOpen) { window.toggleSettings(); } else if (GAME.isPromoOpen) { window.togglePromo(); } else if (ui.leaderboardModal.style.display === 'flex') { window.toggleLeaderboard(); } } }); requestAnimationFrame(loop); }
+function initGameUI() { ui.langSelect.value = SETTINGS.language; ui.resSelect.value = SETTINGS.resolution; ui.gfxSelect.value = SETTINGS.graphics; if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity; GUN.ammo = GUN.maxAmmo; window.updateLanguageUI(); updateUI(); updateRankUI(); currentFullRankName = getFullRankName(); updateMenuStats(); }
+function updateMenuStats() { ui.menuDmgLevel.innerText = "LVL " + GAME.weaponLevel; ui.menuBalance.innerText = GAME.coins + " $"; }
+window.triggerMenuUpgrade = function() { if(GAME.coins >= 1000) { GAME.coins -= 1000; GAME.weaponLevel++; updateMenuStats(); updateUI(); window.saveGame(); SoundSys.levelup(); const btn = document.querySelector('.menu-card.highlight'); btn.style.borderColor = '#22c55e'; setTimeout(() => btn.style.borderColor = '#3b82f6', 300); } else { const btn = document.querySelector('.menu-card.highlight'); btn.style.borderColor = '#ef4444'; setTimeout(() => btn.style.borderColor = '#3b82f6', 300); SoundSys.error(); } }
+window.toggleAttachment = function(type) { if(GAME.state !== 'playing' || GAME.isPaused) return; GUN.attachments[type] = !GUN.attachments[type]; const btn = document.querySelector(`.attachment-btn[title*="${type === 'scope' ? 'Nişangah' : (type === 'silencer' ? 'Susturucu' : 'Lazer')}"]`); if(btn) { if(GUN.attachments[type]) btn.classList.add('active'); else btn.classList.remove('active'); } }
+function getRankData() { for(let i=0; i<RANK_SYSTEM.length; i++) { const r = RANK_SYSTEM[i]; if(GAME.level >= r.min && GAME.level <= r.max) return { ...r, index: i }; } return { ...RANK_SYSTEM[RANK_SYSTEM.length-1], index: RANK_SYSTEM.length-1 }; }
+function getTierIndex(rankData) { const totalLevelsInRank = rankData.max - rankData.min + 1; const currentLevelInRank = GAME.level - rankData.min; const levelsPerTier = totalLevelsInRank / 4; return Math.floor(currentLevelInRank / levelsPerTier); }
+function getFullRankName() { const rank = getRankData(); if(rank.index >= RANK_SYSTEM.length - 1) return rank.name; const tierIdx = Math.min(3, getTierIndex(rank)); return `${rank.name} ${SUB_RANKS[tierIdx]}`; }
+function updateRankUI() { const currentRank = getRankData(); const isMax = currentRank.index >= RANK_SYSTEM.length - 1; const tierIdx = isMax ? 0 : Math.min(3, getTierIndex(currentRank)); const subRank = isMax ? "MAX" : SUB_RANKS[tierIdx]; ui.rankTitle.innerText = currentRank.name; ui.rankTitle.style.color = currentRank.color; ui.rankTitle.style.textShadow = `0 0 15px ${currentRank.color}`; ui.rankSub.innerText = isMax ? "MAX RANK" : `TIER ${subRank}`; ui.rankSub.style.color = currentRank.color; ui.currentRankIcon.innerHTML = `<path d="${currentRank.icon}"/>`; ui.currentRankIcon.style.fill = currentRank.color; ui.currentRankIcon.style.filter = `drop-shadow(0 0 8px ${currentRank.color})`; ui.rankPanel.style.borderLeftColor = currentRank.color; if(ui.menuRankWidget) { ui.menuRankWidget.style.borderRightColor = currentRank.color; ui.menuRankIcon.innerHTML = `<path d="${currentRank.icon}"/>`; ui.menuRankIcon.style.fill = currentRank.color; ui.menuRankName.innerText = currentRank.name; ui.menuRankName.style.color = currentRank.color; } if(isMax) { ui.rankProgressBar.style.width = '100%'; ui.rankProgressBar.style.backgroundColor = currentRank.color; ui.rankProgressText.innerText = "MAX LEVEL"; } else { const totalLevelsInRank = currentRank.max - currentRank.min + 1; const currentLevelInRank = GAME.level - currentRank.min; const percent = Math.min(100, (currentLevelInRank / totalLevelsInRank) * 100); ui.rankProgressBar.style.width = `${percent}%`; ui.rankProgressBar.style.backgroundColor = currentRank.color; const txtNext = TRANSLATIONS[SETTINGS.language].next_rank || 'NEXT'; ui.rankProgressText.innerText = `${txtNext}: ${currentRank.max + 1 - GAME.level} LVL`; } }
+function triggerRankUpAnim(newRankName, rewardAmount) { const t = TRANSLATIONS[SETTINGS.language]; RANK_UP_ANIM.active = true; RANK_UP_ANIM.timer = 200; RANK_UP_ANIM.text = t.msg_rankup; RANK_UP_ANIM.subText = newRankName; RANK_UP_ANIM.rewardText = `+${rewardAmount} $ ${t.msg_reward}`; SoundSys.rankup(); }
+function startLevel(lvl) { GAME.level = lvl; ui.levelText.innerText = `LVL ${lvl}`; const rankData = getRankData(); const newRankName = getFullRankName(); if(newRankName !== currentFullRankName && lvl > 1) { const reward = rankData.reward; if (reward > 0) { GAME.coins += reward; triggerRankUpAnim(newRankName, reward); } else { triggerRankUpAnim(newRankName, 0); } currentFullRankName = newRankName; } updateRankUI(); window.saveGame(); wallBlocks = []; bullets = []; reflexTargets = []; defenseEnemies = [];
+    if(GAME.mode === 'classic') { const maxRows = Math.min(25, 4 + Math.floor(lvl / 2)); const maxCols = Math.min(8, 2 + Math.floor(lvl / 10)); const baseHealth = 15 + (lvl * 5); const blockSize = height / 25; const wallX = width - (width * 0.2) - (maxCols * blockSize); const startY = (height - (maxRows * blockSize)) / 2; for (let c = 0; c < maxCols; c++) { for (let r = 0; r < maxRows; r++) { const isMetal = Math.random() > 0.7; let hp = baseHealth + (Math.random() * 5); if(isMetal) hp *= 1.5; wallBlocks.push({x: wallX + (c * blockSize), y: startY + (r * blockSize), size: blockSize, active: true, type: isMetal ? 'metal' : 'wood', hp: hp, maxHp: hp}); } } const timePerBlock = Math.max(0.8, 2.5 - (lvl * 0.03)); GAME.maxTime = Math.ceil(wallBlocks.length * timePerBlock) + 5; } 
+    else if (GAME.mode === 'reflex') { GAME.targetsToHit = 10 + Math.floor(lvl * 1.5); GAME.targetsHit = 0; GAME.maxTime = 30 + (lvl * 2); reflexSpawnTimer = 0; } 
+    else if (GAME.mode === 'hostage') { GAME.targetsToHit = 5 + lvl + Math.floor(lvl/2); GAME.targetsHit = 0; GAME.maxTime = 25; reflexSpawnTimer = 0; } 
+    else if (GAME.mode === 'defense') { GAME.targetsToHit = 10 + Math.floor(lvl * 2); GAME.targetsHit = 0; GAME.maxTime = 60 + (lvl * 5); defenseSpawnTimer = 0; }
+    GAME.timer = GAME.maxTime; GAME.lastTime = Date.now(); GAME.hitStreak = 0; updateTimerUI(); updateUI(); }
+function gameOver(reason) { const t = TRANSLATIONS[SETTINGS.language]; GAME.state = 'gameover'; if (!isGuest && currentUserDoc) { window.addScore(currentUserDoc, GAME.stats.totalScore); } if(reason === 'breach') { ui.notify.innerText = t.msg_breach; } else { ui.notify.innerText = t.msg_timeup; } ui.notify.style.color = "#ef4444"; ui.notify.style.opacity = 1; SoundSys.error(); setTimeout(() => { ui.notify.style.opacity = 0; ui.notify.style.color = "#fff"; startLevel(GAME.level); GAME.state = 'playing'; }, 2000); }
+function updateTimerUI() { ui.timerDisplay.innerText = GAME.timer.toFixed(1); ui.timerDisplay.style.color = GAME.timer < 5 ? '#fff' : '#ef4444'; }
+function updateUI() { ui.ammoCount.innerText = GUN.ammo; ui.ammoBar.style.width = `${(GUN.ammo/GUN.maxAmmo)*100}%`; ui.scoreDisplay.innerText = GAME.score; ui.coinDisplay.innerText = GAME.coins + " $"; ui.weaponLevelText.innerText = "LVL " + GAME.weaponLevel; const skinName = SKINS[GAME.currentSkin] ? SKINS[GAME.currentSkin].name : "Factory New"; const weaponName = WEAPONS[GAME.currentWeapon] ? WEAPONS[GAME.currentWeapon].name : "UNKNOWN"; ui.gunName.innerText = weaponName.toUpperCase() + " | " + skinName.toUpperCase(); }
+window.toggleStore = function() { GAME.isStoreOpen = !GAME.isStoreOpen; ui.storeModal.style.display = GAME.isStoreOpen ? 'flex' : 'none'; if(GAME.isStoreOpen) { if(GAME.isRankInfoOpen) window.toggleRankInfo(); if(GAME.isWeaponStoreOpen) window.toggleWeaponStore(); if(GAME.isProfileOpen) window.toggleProfile(); if(GAME.isSettingsOpen) window.toggleSettings(); if(GAME.isPromoOpen) window.togglePromo(); if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard(); renderStore(); requestAnimationFrame(renderPreviews); } }
+window.toggleWeaponStore = function() { GAME.isWeaponStoreOpen = !GAME.isWeaponStoreOpen; ui.weaponModal.style.display = GAME.isWeaponStoreOpen ? 'flex' : 'none'; if(GAME.isWeaponStoreOpen) { if(GAME.isRankInfoOpen) window.toggleRankInfo(); if(GAME.isStoreOpen) window.toggleStore(); if(GAME.isProfileOpen) window.toggleProfile(); if(GAME.isSettingsOpen) window.toggleSettings(); if(GAME.isPromoOpen) window.togglePromo(); if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard(); renderWeaponStore(); requestAnimationFrame(renderPreviews); } }
+window.toggleRankInfo = function() { GAME.isRankInfoOpen = !GAME.isRankInfoOpen; ui.rankInfoModal.style.display = GAME.isRankInfoOpen ? 'flex' : 'none'; if(GAME.isRankInfoOpen) { if(GAME.isStoreOpen) window.toggleStore(); if(GAME.isWeaponStoreOpen) window.toggleWeaponStore(); if(GAME.isProfileOpen) window.toggleProfile(); if(GAME.isSettingsOpen) window.toggleSettings(); if(GAME.isPromoOpen) window.togglePromo(); if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard(); renderRankInfo(); } }
+window.toggleProfile = function() { GAME.isProfileOpen = !GAME.isProfileOpen; ui.profileModal.style.display = GAME.isProfileOpen ? 'flex' : 'none'; if(GAME.isProfileOpen) { if(GAME.isStoreOpen) window.toggleStore(); if(GAME.isWeaponStoreOpen) window.toggleWeaponStore(); if(GAME.isRankInfoOpen) window.toggleRankInfo(); if(GAME.isSettingsOpen) window.toggleSettings(); if(GAME.isPromoOpen) window.togglePromo(); if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard(); renderProfile(); } }
+window.toggleSettings = function() { GAME.isSettingsOpen = !GAME.isSettingsOpen; ui.settingsModal.style.display = GAME.isSettingsOpen ? 'flex' : 'none'; if(GAME.isSettingsOpen) { if(GAME.isStoreOpen) window.toggleStore(); if(GAME.isWeaponStoreOpen) window.toggleWeaponStore(); if(GAME.isRankInfoOpen) window.toggleRankInfo(); if(GAME.isProfileOpen) window.toggleProfile(); if(GAME.isPromoOpen) window.togglePromo(); if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard(); } }
+window.togglePromo = function() { GAME.isPromoOpen = !GAME.isPromoOpen; ui.promoModal.style.display = GAME.isPromoOpen ? 'flex' : 'none'; ui.promoResult.innerText = ""; ui.promoInput.value = ""; if(GAME.isPromoOpen) { if(GAME.isStoreOpen) window.toggleStore(); if(GAME.isWeaponStoreOpen) window.toggleWeaponStore(); if(GAME.isRankInfoOpen) window.toggleRankInfo(); if(GAME.isProfileOpen) window.toggleProfile(); if(GAME.isSettingsOpen) window.toggleSettings(); if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard(); setTimeout(() => ui.promoInput.focus(), 100); } }
+window.submitPromoCode = function() { const code = ui.promoInput.value.trim().toLowerCase(); const t = TRANSLATIONS[SETTINGS.language]; if(!code) return; if(code === "masterfc") { if(GAME.redeemedCodes.includes("masterfc")) { ui.promoResult.innerText = t.msg_code_used; ui.promoResult.style.color = "#ef4444"; SoundSys.error(); } else { GAME.coins += 20000; GAME.redeemedCodes.push("masterfc"); updateUI(); updateMenuStats(); window.saveGame(); ui.promoResult.innerText = t.msg_code_success; ui.promoResult.style.color = "#22c55e"; SoundSys.rankup(); setTimeout(() => { if(GAME.isPromoOpen) window.togglePromo(); }, 1500); } } else { ui.promoResult.innerText = t.msg_code_invalid; ui.promoResult.style.color = "#ef4444"; SoundSys.error(); } }
+window.changeLanguage = function(lang) { SETTINGS.language = lang; window.updateLanguageUI(); window.saveGame(); }
+window.updateLanguageUI = function() { const t = TRANSLATIONS[SETTINGS.language]; document.querySelectorAll('[data-lang]').forEach(el => { const key = el.getAttribute('data-lang'); if (t[key]) { if(el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) { el.innerText = t[key]; } else { el.innerHTML = t[key]; } } }); }
+window.changeResolution = function(res) { SETTINGS.resolution = res; resize(); window.saveGame(); }
+window.changeGraphics = function(gfx) { SETTINGS.graphics = gfx; window.saveGame(); }
+function renderStore() { ui.storeList.innerHTML = ''; const t = TRANSLATIONS[SETTINGS.language]; const btnTextBuy = t.buy || 'BUY'; const btnTextEquip = t.equip || 'EQUIP'; const btnTextEquipped = t.equipped || 'EQUIPPED'; Object.values(SKINS).forEach(skin => { const isOwned = GAME.ownedSkins.includes(skin.id); const isActive = (skin.type === 'gun' && GAME.currentSkin === skin.id) || (skin.type === 'silencer' && GAME.currentSilencer === skin.id); const card = document.createElement('div'); card.className = `item-card ${isActive ? 'active' : ''}`; let btnHTML = ''; if (isOwned) { if (isActive) { btnHTML = `<button class="action-btn btn-equipped" onclick="window.equipSkin('${skin.id}')">${btnTextEquipped}</button>`; } else { btnHTML = `<button class="action-btn btn-equip" onclick="window.equipSkin('${skin.id}')">${btnTextEquip}</button>`; } } else { btnHTML = `<button class="action-btn btn-buy" onclick="window.buySkin('${skin.id}')">${btnTextBuy}</button>`; } card.innerHTML = ` <div class="skin-preview-box"> <canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas> </div> <div style="font-weight:bold; color:#fff">${skin.name}</div> <div style="color:#eab308; margin-bottom:5px;">${skin.price} $</div> ${btnHTML} `; ui.storeList.appendChild(card); }); }
+function renderWeaponStore() { ui.weaponList.innerHTML = ''; const t = TRANSLATIONS[SETTINGS.language]; const btnTextBuy = t.buy || 'BUY'; const btnTextEquip = t.equip || 'EQUIP'; const btnTextEquipped = t.equipped || 'EQUIPPED'; Object.keys(WEAPONS).forEach(key => { const w = WEAPONS[key]; const isOwned = GAME.ownedWeapons.includes(key); const isActive = GAME.currentWeapon === key; const card = document.createElement('div'); card.className = `item-card ${isActive ? 'active' : ''}`; card.style.borderColor = isActive ? '#3b82f6' : '#333'; let btnHTML = ''; if (isOwned) { if (isActive) { btnHTML = `<button class="action-btn" style="background:#333; color:#777" onclick="window.equipWeapon('${key}')">${btnTextEquipped}</button>`; } else { btnHTML = `<button class="action-btn" style="background:#3b82f6; color:white" onclick="window.equipWeapon('${key}')">${btnTextEquip}</button>`; } } else { btnHTML = `<button class="action-btn" style="background:#eab308; color:black" onclick="window.buyWeapon('${key}')">${btnTextBuy}</button>`; } card.innerHTML = ` <div class="skin-preview-box" style="border-color:${isActive?'#3b82f6':'#333'}"> <canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas> </div> <div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div> <div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div> <div style="color:#3b82f6; margin-bottom:5px; font-weight:bold;">${w.price} $</div> ${btnHTML} `; ui.weaponList.appendChild(card); }); }
+window.buySkin = (id) => { const s = SKINS[id]; if(GAME.coins >= s.price) { GAME.coins -= s.price; GAME.ownedSkins.push(id); if(s.type === 'silencer') GAME.currentSilencer = id; else GAME.currentSkin = id; updateUI(); updateMenuStats(); renderStore(); window.saveGame(); SoundSys.buy(); requestAnimationFrame(renderPreviews); } else { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); SoundSys.error(); } }
+window.equipSkin = (id) => { const s = SKINS[id]; if(s.type === 'silencer') GAME.currentSilencer = id; else GAME.currentSkin = id; renderStore(); window.saveGame(); SoundSys.buy(); updateUI(); requestAnimationFrame(renderPreviews); }
+window.buyWeapon = (key) => { const w = WEAPONS[key]; if(GAME.coins >= w.price) { GAME.coins -= w.price; GAME.ownedWeapons.push(key); GAME.currentWeapon = key; GUN.maxAmmo = w.capacity; GUN.ammo = w.capacity; updateUI(); updateMenuStats(); renderWeaponStore(); window.saveGame(); SoundSys.buy(); requestAnimationFrame(renderPreviews); } else { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); SoundSys.error(); } }
+window.equipWeapon = (key) => { GAME.currentWeapon = key; const w = WEAPONS[key]; GUN.maxAmmo = w.capacity; GUN.ammo = w.capacity; renderWeaponStore(); window.saveGame(); SoundSys.buy(); updateUI(); requestAnimationFrame(renderPreviews); }
+window.triggerUpgradeAnim = () => { if(GAME.state !== 'playing' || UPGRADE.active) return; if(GAME.coins >= 1000) { GAME.coins -= 1000; updateUI(); UPGRADE.active = true; UPGRADE.phase = 0; UPGRADE.timer = 0; UPGRADE.boxY = -100; UPGRADE.boxScale = 1; UPGRADE.glow = 0; UPGRADE.particles = []; } else { ui.coinDisplay.classList.add('no-money'); setTimeout(()=> ui.coinDisplay.classList.remove('no-money'), 400); } }
+function updateUpgradeAnim() { UPGRADE.timer++; const cx = width / 2; const cy = height / 2; if(UPGRADE.phase === 0) { UPGRADE.boxY += (cy - UPGRADE.boxY) * 0.15; if(Math.abs(cy - UPGRADE.boxY) < 5) { UPGRADE.phase = 1; UPGRADE.timer = 0; SoundSys.boxDrop(); } } else if(UPGRADE.phase === 1) { UPGRADE.boxScale = 1 + Math.sin(UPGRADE.timer * 0.8) * 0.05; if(UPGRADE.timer > 60) { UPGRADE.phase = 2; UPGRADE.timer = 0; SoundSys.levelup(); if(SETTINGS.graphics !== 'low') { for(let i=0; i<30; i++) UPGRADE.particles.push({x: cx, y: cy, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1, color: Math.random()>0.5?'#eab308':'#fff'}); } GAME.weaponLevel++; updateUI(); window.saveGame(); } } else if(UPGRADE.phase === 2) { if(UPGRADE.timer > 120) UPGRADE.active = false; } }
+function drawUpgradeEffect() { const t = TRANSLATIONS[SETTINGS.language]; const cx = width/2; const cy = height/2; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,width,height); if(UPGRADE.phase <= 1) { ctx.save(); ctx.translate(cx, UPGRADE.boxY); if(UPGRADE.phase === 1) ctx.rotate((Math.random()-0.5)*0.1); ctx.scale(UPGRADE.boxScale, UPGRADE.boxScale); ctx.fillStyle = '#444'; ctx.fillRect(-40, -30, 80, 60); ctx.fillStyle = '#555'; ctx.fillRect(-35, -25, 70, 50); ctx.fillStyle = '#eab308'; ctx.fillRect(-40, -5, 80, 10); ctx.fillRect(-10, -30, 20, 60); ctx.restore(); } if(UPGRADE.phase === 2) { if(SETTINGS.graphics !== 'low') { UPGRADE.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.02; if(p.life>0) { ctx.globalAlpha = p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, 5, 5); } }); ctx.globalAlpha = 1; } const floatY = cy - Math.min(UPGRADE.timer * 2, 50); const scale = Math.min(UPGRADE.timer * 0.1, 2); ctx.save(); ctx.translate(cx, floatY); ctx.scale(scale, scale); ctx.shadowColor = '#eab308'; ctx.shadowBlur = 20; ctx.strokeStyle = '#eab308'; ctx.lineWidth = 3; ctx.beginPath(); for(let i=0; i<10; i++) { ctx.moveTo(-15, -20 + i*5); ctx.lineTo(15, -18 + i*5); ctx.lineTo(-15, -15 + i*5); } ctx.stroke(); ctx.fillStyle = '#fff'; ctx.fillRect(-2, -25, 4, 55); ctx.restore(); ctx.shadowBlur = 0; ctx.save(); ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = "bold 40px Segoe UI"; ctx.fillText(t.msg_upgraded, cx, cy + 80); ctx.font = "20px Segoe UI"; ctx.fillStyle = "#eab308"; ctx.fillText(t.msg_dmg_added, cx, cy + 110); ctx.restore(); } }
+function handleClick() { if(GAME.state === 'menu' || GAME.state === 'lobby') return; if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex') return; SoundSys.resume(); if(GUN.reloading) return; if(GUN.ammo <= 0) { reload(); return; } const now = Date.now(); if(now - GUN.lastShot > 110) { shoot(); GUN.lastShot = now; } }
+function shoot() { GUN.ammo--; updateUI(); SoundSys.shoot(GUN.attachments.silencer); const rMod = GUN.attachments.silencer ? 0.8 : 1.0; const weaponData = WEAPONS[GAME.currentWeapon]; const dmgMult = weaponData.damage || 1; let baseRecoil = 20; let baseAngle = -0.15; if(GAME.currentWeapon === 'beretta') { baseRecoil = 25; baseAngle = -0.18; } if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; } GUN.recoilX = baseRecoil * rMod; GUN.recoilAngle = baseAngle * rMod; GUN.slideOffset = (GAME.currentWeapon === 'magnum') ? 40 : 25; const barrelLen = GUN.attachments.silencer ? 95 : 70; const visualAngle = GUN.angle + GUN.recoilAngle * 0.5; const nX = (GUN.x - GUN.recoilX*0.5) + Math.cos(visualAngle) * barrelLen; const nY = GUN.y + Math.sin(visualAngle) * barrelLen; const fireAngle = GUN.angle; let spread = (Math.random()-0.5) * 0.015; if(GUN.attachments.scope) spread = 0; const damage = (45 + (GAME.weaponLevel - 1) * 10) * dmgMult; let bulletSpeed = 30; if(GAME.mode === 'reflex' || GAME.mode === 'hostage') { bulletSpeed = 80; } bullets.push({ x: nX, y: nY, vx: Math.cos(fireAngle + spread) * bulletSpeed, vy: Math.sin(fireAngle + spread) * bulletSpeed, prevX: nX, prevY: nY, active: true, power: damage }); shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); SoundSys.shell(); if(!GUN.attachments.silencer && SETTINGS.graphics !== 'low') { flashTimer = 3; flashPos = {x:nX, y:nY, angle:visualAngle}; } }
+function reload() { if(GUN.reloading || GUN.ammo === GUN.maxAmmo) return; if(GAME.coins < GAME.reloadCost) { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); return; } GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: 15, height: 35 }); SoundSys.reload(); setTimeout(() => { GUN.ammo = GUN.maxAmmo; GUN.reloading = false; updateUI(); }, wData.reloadTime); }
 function checkHitmanCombo() { if (GAME.hitStreak > 0 && GAME.hitStreak % 15 === 0) { HITMAN_ANIM.active = true; HITMAN_ANIM.timer = 90; HITMAN_ANIM.alpha = 0; SoundSys.levelup(); } }
-function drawHitmanEffect(ctx) {
-    const t = TRANSLATIONS[SETTINGS.language];
-    if (!HITMAN_ANIM.active) return; HITMAN_ANIM.timer--; if (HITMAN_ANIM.timer <= 0) { HITMAN_ANIM.active = false; return; }
-    if (HITMAN_ANIM.timer > 70) HITMAN_ANIM.alpha += 0.05; else if (HITMAN_ANIM.timer < 20) HITMAN_ANIM.alpha -= 0.05; if (HITMAN_ANIM.alpha > 1) HITMAN_ANIM.alpha = 1; if (HITMAN_ANIM.alpha < 0) HITMAN_ANIM.alpha = 0;
-    const cx = width / 2; const cy = height / 2 - 50; ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300); gradient.addColorStop(0, 'rgba(220, 38, 38, 0.4)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); const scale = 1 + Math.sin(Date.now() * 0.01) * 0.05; ctx.translate(cx, cy); ctx.scale(scale * 3, scale * 3); const agentPath = new Path2D("M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10C22 6.48 17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"); ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; ctx.fill(agentPath); ctx.restore(); ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; ctx.textAlign = "center"; ctx.font = "900 60px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 30; ctx.fillText("HITMAN", cx, cy + 120); ctx.font = "bold 20px 'Segoe UI'"; ctx.fillStyle = "#ef4444"; ctx.shadowBlur = 0; ctx.fillText(`15 ${t.msg_hit_streak}`, cx, cy + 150); ctx.restore();
-}
-function drawRankUpEffect(ctx) {
-    if (!RANK_UP_ANIM.active) return; RANK_UP_ANIM.timer--; if (RANK_UP_ANIM.timer <= 0) { RANK_UP_ANIM.active = false; return; }
-    const cx = width / 2; const cy = height / 2; const alpha = Math.min(1, RANK_UP_ANIM.timer / 50); ctx.save(); ctx.globalAlpha = alpha; const rankData = getRankData(); const color = rankData.color; ctx.fillStyle = "rgba(0, 0, 0, 0.9)"; ctx.fillRect(0, 0, width, height); ctx.textAlign = "center"; ctx.shadowBlur = 30; ctx.shadowColor = color; ctx.font = "900 80px 'Segoe UI'"; ctx.fillStyle = color; ctx.fillText(RANK_UP_ANIM.text, cx, cy - 40); ctx.font = "bold 50px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.fillText(RANK_UP_ANIM.subText, cx, cy + 40); if (RANK_UP_ANIM.rewardText) { ctx.font = "bold 30px 'Segoe UI'"; ctx.fillStyle = "#22c55e"; ctx.shadowColor = "#22c55e"; ctx.shadowBlur = 10; ctx.fillText(RANK_UP_ANIM.rewardText, cx, cy + 90); } for(let i=0; i<8; i++) { ctx.fillStyle = Math.random() > 0.5 ? color : "#fff"; ctx.shadowColor = color; ctx.fillRect(cx + (Math.random()-0.5)*500, cy + (Math.random()-0.5)*400, 5, 5); } ctx.restore();
-}
-
-// Main Loop
+function drawHitmanEffect(ctx) { const t = TRANSLATIONS[SETTINGS.language]; if (!HITMAN_ANIM.active) return; HITMAN_ANIM.timer--; if (HITMAN_ANIM.timer <= 0) { HITMAN_ANIM.active = false; return; } if (HITMAN_ANIM.timer > 70) HITMAN_ANIM.alpha += 0.05; else if (HITMAN_ANIM.timer < 20) HITMAN_ANIM.alpha -= 0.05; if (HITMAN_ANIM.alpha > 1) HITMAN_ANIM.alpha = 1; if (HITMAN_ANIM.alpha < 0) HITMAN_ANIM.alpha = 0; const cx = width / 2; const cy = height / 2 - 50; ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300); gradient.addColorStop(0, 'rgba(220, 38, 38, 0.4)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); const scale = 1 + Math.sin(Date.now() * 0.01) * 0.05; ctx.translate(cx, cy); ctx.scale(scale * 3, scale * 3); const agentPath = new Path2D("M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10C22 6.48 17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"); ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; ctx.fill(agentPath); ctx.restore(); ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; ctx.textAlign = "center"; ctx.font = "900 60px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 30; ctx.fillText("HITMAN", cx, cy + 120); ctx.font = "bold 20px 'Segoe UI'"; ctx.fillStyle = "#ef4444"; ctx.shadowBlur = 0; ctx.fillText(`15 ${t.msg_hit_streak}`, cx, cy + 150); ctx.restore(); }
+function drawRankUpEffect(ctx) { if (!RANK_UP_ANIM.active) return; RANK_UP_ANIM.timer--; if (RANK_UP_ANIM.timer <= 0) { RANK_UP_ANIM.active = false; return; } const cx = width / 2; const cy = height / 2; const alpha = Math.min(1, RANK_UP_ANIM.timer / 50); ctx.save(); ctx.globalAlpha = alpha; const rankData = getRankData(); const color = rankData.color; ctx.fillStyle = "rgba(0, 0, 0, 0.9)"; ctx.fillRect(0, 0, width, height); ctx.textAlign = "center"; ctx.shadowBlur = 30; ctx.shadowColor = color; ctx.font = "900 80px 'Segoe UI'"; ctx.fillStyle = color; ctx.fillText(RANK_UP_ANIM.text, cx, cy - 40); ctx.font = "bold 50px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.fillText(RANK_UP_ANIM.subText, cx, cy + 40); if (RANK_UP_ANIM.rewardText) { ctx.font = "bold 30px 'Segoe UI'"; ctx.fillStyle = "#22c55e"; ctx.shadowColor = "#22c55e"; ctx.shadowBlur = 10; ctx.fillText(RANK_UP_ANIM.rewardText, cx, cy + 90); } for(let i=0; i<8; i++) { ctx.fillStyle = Math.random() > 0.5 ? color : "#fff"; ctx.shadowColor = color; ctx.fillRect(cx + (Math.random()-0.5)*500, cy + (Math.random()-0.5)*400, 5, 5); } ctx.restore(); }
 function loop() {
-    const t = TRANSLATIONS[SETTINGS.language];
-    const now = Date.now();
-    const dt = (now - GAME.lastTime) / 1000;
-    if(!GAME.isPaused) GAME.lastTime = now; 
-    
-    ctx.clearRect(0,0,width,height);
-
-    // ... menu state checks ...
-    if (GAME.state === 'menu' || GAME.state === 'lobby') {
-        // ... existing menu rendering ...
-        if (SETTINGS.graphics !== 'low') {
-            for(let i=0; i<20; i++) {
-                ctx.fillStyle = `rgba(100, 100, 120, 0.1)`;
-                ctx.beginPath();
-                ctx.arc((now/20 + i*100) % width, (Math.sin(now/1000 + i) * 100 + height/2), 2 + i, 0, Math.PI*2);
-                ctx.fill();
-            }
-        }
-        if(GAME.state === 'menu') {
-             // ... existing gun menu draw ...
-             const cx = width / 2 + 100; const cy = height / 2; ctx.save(); ctx.translate(cx, cy); ctx.scale(2.5, 2.5); ctx.rotate(menuRotation); const wType = GAME.currentWeapon; if(wType==='glock') drawDetailedGlock(ctx,0,0,0,0); else if(wType==='beretta') drawDetailedBeretta(ctx,0,0,0,0); else if(wType==='canik') drawDetailedCanik(ctx,0,0,0,0); else if(wType==='magnum') drawDetailedMagnum(ctx,0,0,0,0); else if(wType==='fn57') drawDetailedFN57(ctx,0,0,0,0); ctx.restore();
-        }
-        if(GAME.isStoreOpen || GAME.isWeaponStoreOpen) requestAnimationFrame(renderPreviews);
-        requestAnimationFrame(loop);
-        return; 
-    }
-    
-    // ... gameplay bg ...
-    if(GAME.state === 'playing') {
-        if (SETTINGS.graphics !== 'low') {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-            ctx.lineWidth = 1;
-            const gridSize = 40;
-            ctx.beginPath();
-            for(let x=0; x<=width; x+=gridSize) { ctx.moveTo(x,0); ctx.lineTo(x,height); }
-            for(let y=0; y<=height; y+=gridSize) { ctx.moveTo(0,y); ctx.lineTo(width,y); }
-            ctx.stroke();
-        }
-        
-        // Draw "Safety Line" for Defense Mode
-        if(GAME.mode === 'defense') {
-            ctx.beginPath();
-            ctx.moveTo(GUN.x + 80, 0);
-            ctx.lineTo(GUN.x + 80, height);
-            ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
-            ctx.setLineDash([10, 10]);
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-    }
-
-    if (GAME.state === 'playing' && !GAME.isPaused) {
-        if (!GAME.weaponUsage[GAME.currentWeapon]) GAME.weaponUsage[GAME.currentWeapon] = 0;
-        GAME.weaponUsage[GAME.currentWeapon] += (dt * 1000); checkMedals();
-        GAME.timer -= dt; 
-        if (GAME.timer <= 0) { GAME.timer = 0; gameOver(); } 
-        updateTimerUI();
-    }
+    const t = TRANSLATIONS[SETTINGS.language]; const now = Date.now(); const dt = (now - GAME.lastTime) / 1000; if(!GAME.isPaused) GAME.lastTime = now; ctx.clearRect(0,0,width,height);
+    if (GAME.state === 'menu' || GAME.state === 'lobby') { if (SETTINGS.graphics !== 'low') { for(let i=0; i<20; i++) { ctx.fillStyle = `rgba(100, 100, 120, 0.1)`; ctx.beginPath(); ctx.arc((now/20 + i*100) % width, (Math.sin(now/1000 + i) * 100 + height/2), 2 + i, 0, Math.PI*2); ctx.fill(); } } if(GAME.state === 'menu') { const cx = width / 2 + 100; const cy = height / 2; ctx.save(); ctx.translate(cx, cy); ctx.scale(2.5, 2.5); ctx.rotate(menuRotation); const wType = GAME.currentWeapon; if(wType==='glock') drawDetailedGlock(ctx,0,0,0,0); else if(wType==='beretta') drawDetailedBeretta(ctx,0,0,0,0); else if(wType==='canik') drawDetailedCanik(ctx,0,0,0,0); else if(wType==='magnum') drawDetailedMagnum(ctx,0,0,0,0); else if(wType==='fn57') drawDetailedFN57(ctx,0,0,0,0); ctx.restore(); } if(GAME.isStoreOpen || GAME.isWeaponStoreOpen) requestAnimationFrame(renderPreviews); requestAnimationFrame(loop); return; }
+    if(GAME.state === 'playing') { if (SETTINGS.graphics !== 'low') { ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)'; ctx.lineWidth = 1; const gridSize = 40; ctx.beginPath(); for(let x=0; x<=width; x+=gridSize) { ctx.moveTo(x,0); ctx.lineTo(x,height); } for(let y=0; y<=height; y+=gridSize) { ctx.moveTo(0,y); ctx.lineTo(width,y); } ctx.stroke(); } if(GAME.mode === 'defense') { ctx.beginPath(); ctx.moveTo(GUN.x + 80, 0); ctx.lineTo(GUN.x + 80, height); ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)'; ctx.setLineDash([10, 10]); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); } }
+    if (GAME.state === 'playing' && !GAME.isPaused) { if (!GAME.weaponUsage[GAME.currentWeapon]) GAME.weaponUsage[GAME.currentWeapon] = 0; GAME.weaponUsage[GAME.currentWeapon] += (dt * 1000); checkMedals(); GAME.timer -= dt; if (GAME.timer <= 0) { GAME.timer = 0; gameOver(); } updateTimerUI(); }
     if(UPGRADE.active) updateUpgradeAnim();
-
-    const dx = mouse.x - GUN.x; const dy = mouse.y - GUN.y;
-    if(!GAME.isPaused) {
-        GUN.targetAngle = Math.atan2(dy, dx); 
-        GUN.angle += (GUN.targetAngle - GUN.angle) * 0.2; 
-    }
-    GUN.recoilX *= 0.8; GUN.recoilAngle *= 0.8; GUN.slideOffset *= 0.8;
-    // ... laser drawing ...
-    if(GUN.attachments.laser) { const bLen = GUN.attachments.silencer ? 95 : 70; const lx = (GUN.x - GUN.recoilX) + Math.cos(GUN.angle+GUN.recoilAngle)*bLen; const ly = GUN.y + Math.sin(GUN.angle+GUN.recoilAngle)*bLen; ctx.beginPath(); ctx.moveTo(lx, ly+10); ctx.lineTo(lx + Math.cos(GUN.angle)*2000, ly+10 + Math.sin(GUN.angle)*2000); ctx.strokeStyle='rgba(234, 179, 8, 0.5)'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#eab308'; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI*2); ctx.fill(); }
-
+    const dx = mouse.x - GUN.x; const dy = mouse.y - GUN.y; if(!GAME.isPaused) { GUN.targetAngle = Math.atan2(dy, dx); GUN.angle += (GUN.targetAngle - GUN.angle) * 0.2; } GUN.recoilX *= 0.8; GUN.recoilAngle *= 0.8; GUN.slideOffset *= 0.8; if(GUN.attachments.laser) { const bLen = GUN.attachments.silencer ? 95 : 70; const lx = (GUN.x - GUN.recoilX) + Math.cos(GUN.angle+GUN.recoilAngle)*bLen; const ly = GUN.y + Math.sin(GUN.angle+GUN.recoilAngle)*bLen; ctx.beginPath(); ctx.moveTo(lx, ly+10); ctx.lineTo(lx + Math.cos(GUN.angle)*2000, ly+10 + Math.sin(GUN.angle)*2000); ctx.strokeStyle='rgba(234, 179, 8, 0.5)'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#eab308'; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI*2); ctx.fill(); }
     let levelCleared = false;
-
-    // === MODE SPECIFIC LOGIC ===
     if(GAME.state === 'playing' && !GAME.isPaused) {
-        if(GAME.mode === 'classic') {
-            // ... existing classic logic ...
-            let allCleared = true;
-            wallBlocks.forEach(b => {
-                if(b.active) {
-                    allCleared = false;
-                    const damagePct = b.hp / b.maxHp;
-                    const size = b.size;
-                    if(b.hitTimer > 0) { b.hitTimer--; ctx.fillStyle = '#fff'; ctx.fillRect(b.x, b.y, size, size); } 
-                    else {
-                        if(b.type === 'metal') { const mCol = `rgba(50, 60, 80, ${damagePct})`; ctx.fillStyle = '#1e293b'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = mCol; ctx.fillRect(b.x + 2, b.y + 2, size - 4, size - 4); } 
-                        else { const wCol = `rgba(120, 80, 50, ${damagePct})`; ctx.fillStyle = '#3a2510'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = wCol; ctx.fillRect(b.x + 2, b.y + 2, size - 4, size - 4); }
-                    }
-                }
-            });
-            levelCleared = allCleared;
-        } 
-        else if(GAME.mode === 'reflex') {
-            // ... existing reflex logic ...
-            reflexSpawnTimer--;
-            if(reflexSpawnTimer <= 0) {
-                const size = 60 - Math.min(30, GAME.level * 2);
-                const padding = 100;
-                const rx = padding + Math.random() * (width - padding*2);
-                const ry = padding + Math.random() * (height - padding*2);
-                const life = 120 - Math.min(60, GAME.level * 5); 
-                reflexTargets.push({x: rx, y: ry, size: size, maxLife: life, life: life, active: true, id: Date.now()+Math.random()});
-                SoundSys.blip();
-                reflexSpawnTimer = 60 - Math.min(40, GAME.level * 3); 
-            }
-            reflexTargets.forEach(t => {
-                if(!t.active) return;
-                t.life--;
-                if(t.life <= 0) { t.active = false; } else {
-                    const lifePct = t.life / t.maxLife;
-                    const scale = 0.5 + (lifePct * 0.5); 
-                    ctx.save(); ctx.translate(t.x, t.y); ctx.scale(scale, scale);
-                    ctx.beginPath(); ctx.arc(0, 0, t.size/2, 0, Math.PI*2); ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4; ctx.stroke();
-                    ctx.fillStyle = `rgba(239, 68, 68, 0.2)`; ctx.fill();
-                    ctx.beginPath(); ctx.arc(0, 0, t.size/6, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
-                    ctx.beginPath(); ctx.arc(0, 0, (t.size/2) + 5, -Math.PI/2, (-Math.PI/2) + (Math.PI*2 * lifePct), false); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-                    ctx.restore();
-                }
-            });
-            if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
-            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_targets}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
-        } else if (GAME.mode === 'hostage') {
-            // ... existing hostage logic ...
-            reflexSpawnTimer--;
-            if(reflexSpawnTimer <= 0) {
-                const size = 50; const padding = 100; const rx = padding + Math.random() * (width - padding*2); const ry = padding + Math.random() * (height - padding*2); const life = 90; 
-                reflexTargets.push({x: rx, y: ry, size: size, maxLife: life, life: life, active: true, id: Date.now()+Math.random()});
-                SoundSys.blip();
-                reflexSpawnTimer = 45 - Math.min(25, GAME.level * 2); 
-            }
-            reflexTargets.forEach(t => {
-                if(!t.active) return;
-                t.life--;
-                if(t.life <= 0) t.active = false;
-                else {
-                    const lifePct = t.life / t.maxLife;
-                    const scale = 0.5 + (lifePct * 0.5);
-                    ctx.save(); ctx.translate(t.x, t.y); ctx.scale(scale, scale);
-                    ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(0, -10, 15, 0, Math.PI*2); ctx.fill(); ctx.fillRect(-15, 5, 30, 25); 
-                    ctx.strokeStyle = "#fff"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-20,0); ctx.lineTo(20,0); ctx.moveTo(0,-20); ctx.lineTo(0,20); ctx.stroke();
-                    ctx.restore();
-                }
-            });
-            if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
-            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#facc15"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_rescue}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
-        } else if (GAME.mode === 'defense') {
-            // === DEFENSE MODE LOGIC ===
-            defenseSpawnTimer--;
-            
-            // DÜZELTME 1: Düşman Sıklığı (Spawn Rate)
-            // Başlangıçta daha seyrek (100 frame), seviye arttıkça sıklaşır (min 30 frame)
-            let spawnRate = 100 - Math.min(70, GAME.level * 4); 
-            
-            // Limit 20'ye çıkarıldı
-            if(defenseSpawnTimer <= 0 && defenseEnemies.length < 20) {
-                const size = 50;
-                
-                // DÜZELTME 2: Hız Dengesi (Speed Balance)
-                // Eskiden 1.5 ile başlıyordu, şimdi 0.8 ile başlıyor (Daha yavaş başlangıç)
-                // Her levelde 0.12 hızlanıyor.
-                const speed = 0.8 + (GAME.level * 0.12) + (Math.random() * 0.5); 
-                
-                const hp = 30 + (GAME.level * 5); 
-                const spawnY = 50 + Math.random() * (height - 100);
-                
-                defenseEnemies.push({
-                    x: width + size, 
-                    y: spawnY,
-                    initialY: spawnY,
-                    size: size,
-                    hp: hp,
-                    maxHp: hp,
-                    speed: speed,
-                    active: true,
-                    jitterPhase: Math.random() * Math.PI * 2,
-                    hitTimer: 0
-                });
-                defenseSpawnTimer = spawnRate;
-            }
-
-            // Update and Draw Defense Enemies
-            defenseEnemies.forEach(e => {
-                if(!e.active) return;
-                
-                // 1. Move Left
-                e.x -= e.speed;
-                
-                // 2. Jitter Effect
-                const jitterAmt = 3; 
-                e.y = e.initialY + Math.sin(Date.now() * 0.005 + e.jitterPhase) * 20 + Math.sin(Date.now() * 0.05) * jitterAmt;
-
-                // 3. Collision Check with Player Area
-                const safeZoneX = GUN.x + 80;
-                if (e.x < safeZoneX) {
-                    gameOver('breach'); 
-                    return;
-                }
-
-                // 4. Draw
-                const hpPct = e.hp / e.maxHp;
-                const hitFlash = e.hitTimer > 0;
-                if(e.hitTimer > 0) e.hitTimer--;
-
-                ctx.save();
-                ctx.translate(e.x, e.y);
-                ctx.rotate(Math.sin(Date.now() * 0.01) * 0.1);
-                
-                if(hitFlash) {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
-                } else {
-                    // Body
-                    ctx.fillStyle = '#7f1d1d'; 
-                    ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
-                    
-                    // Front Face
-                    ctx.fillStyle = `rgba(220, 38, 38, ${0.5 + hpPct * 0.5})`;
-                    ctx.fillRect(-e.size/2 + 4, -e.size/2 + 4, e.size - 8, e.size - 8);
-                    
-                    // "Spikes"
-                    ctx.fillStyle = '#000';
-                    ctx.beginPath();
-                    ctx.moveTo(-10, -5); ctx.lineTo(-20, 0); ctx.lineTo(-10, 5); ctx.fill();
-                    
-                    // Health Bar
-                    ctx.fillStyle = '#333';
-                    ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size, 5);
-                    ctx.fillStyle = '#ef4444';
-                    ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size * hpPct, 5);
-                }
-
-                ctx.restore();
-            });
-            
-            // DÜZELTME 3: Ölü düşmanları diziden temizle (Cleaning)
-            // Bu satır olmazsa dizi dolar ve yeni düşman gelmez.
-            defenseEnemies = defenseEnemies.filter(e => e.active);
-
-            // Check win condition
-            if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
-            
-            // UI
-            ctx.font = "bold 20px Segoe UI";
-            ctx.fillStyle = "#ef4444";
-            ctx.textAlign = "center";
-            ctx.fillText(`${t.msg_wave}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
-        }
-    } else if (GAME.isPaused) {
-        // ... existing pause draw ...
-        if(GAME.mode === 'classic') {
-             wallBlocks.forEach(b => {
-                 if(!b.active) return;
-                 const size = b.size; const damagePct = b.hp / b.maxHp;
-                 if(b.type === 'metal') { ctx.fillStyle = '#1e293b'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = `rgba(50, 60, 80, ${damagePct})`; ctx.fillRect(b.x+2, b.y+2, size-4, size-4); } 
-                 else { ctx.fillStyle = '#3a2510'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = `rgba(120, 80, 50, ${damagePct})`; ctx.fillRect(b.x+2, b.y+2, size-4, size-4); }
-             });
-        }
-    }
-
-    // ... level clear logic ...
-    if(levelCleared && GAME.state==='playing') { 
-        GAME.state='leveling'; 
-        
-        // NEW: Increment independent mode level
-        if (GAME.modeLevels[GAME.mode]) {
-            GAME.modeLevels[GAME.mode]++;
-        } else {
-            GAME.modeLevels[GAME.mode] = 2;
-        }
-        
-        // Save progress immediately
-        window.saveGame();
-
-        if(GAME.mode === 'hostage') {
-            GAME.hostagesSaved++; renderHostageUI();
-            if(GAME.hostagesSaved >= GAME.totalHostages) {
-                ui.notify.innerText = t.msg_all_saved; ui.notify.style.color = "#22c55e"; setTimeout(() => { GAME.hostagesSaved = 0; renderHostageUI(); }, 3000);
-            } else { ui.notify.innerText = t.msg_saved; ui.notify.style.color = "#facc15"; }
-        } else {
-            ui.notify.innerText = t.msg_level_clear; ui.notify.style.color = "#fff"; 
-        }
-        ui.notify.style.opacity=1; 
-        
-        // Load the NEXT level from the stored mode data
-        setTimeout(()=>{ 
-            ui.notify.style.opacity=0; 
-            const nextLvl = GAME.modeLevels[GAME.mode];
-            if(nextLvl < GAME.maxLevel){ 
-                startLevel(nextLvl); 
-                GAME.state='playing'; 
-            } 
-        }, 2000); 
-    }
-
-    // BULLET LOGIC
-    bullets.forEach(b => {
-        if(!b.active) return;
-        if(!GAME.isPaused) {
-            for(let i=0; i<5; i++) {
-                if(!b.active) break; b.prevX = b.x; b.prevY = b.y; b.x += b.vx/5; b.y += b.vy/5;
-                if(b.x>width || b.y<0 || b.y>height) { b.active=false; break; }
-                
-                if(GAME.mode === 'classic') {
-                    // ... existing classic collision ...
-                    for(let w of wallBlocks) {
-                        if(w.active && b.x>w.x && b.x<w.x+w.size && b.y>w.y && b.y<w.y+w.size) {
-                            w.hp -= b.power; w.hitTimer=3;
-                            if(w.hp<=0) { 
-                                w.active=false; GAME.score+=100; GAME.coins+=10; GAME.stats.totalScore += 100; GAME.stats.totalBlocks++; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++; checkHitmanCombo(); 
-                                const debColor = w.type === 'metal' ? '#64748b' : '#a05a2c';
-                                if (SETTINGS.graphics !== 'low') { for(let k=0;k<6;k++) particles.push({x:w.x+w.size/2, y:w.y+w.size/2, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:debColor, size:w.size/3}); }
-                            } else SoundSys.impact();
-                            b.power -= 20; if(b.power<=0) { b.active=false; break; }
-                        }
-                    }
-                } 
-                else if(GAME.mode === 'reflex' || GAME.mode === 'hostage') {
-                    // ... existing reflex collision ...
-                    for(let t of reflexTargets) {
-                        if(t.active) {
-                            const dist = Math.hypot(b.x - t.x, b.y - t.y);
-                            if(dist < t.size/2) {
-                                t.active = false; GAME.targetsHit++; GAME.score+=200; GAME.coins+=20; GAME.stats.totalScore += 200; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++;
-                                if (SETTINGS.graphics !== 'low') { for(let k=0;k<8;k++) particles.push({x:t.x, y:t.y, vx:(Math.random()-0.5)*20, vy:(Math.random()-0.5)*20, life:1, color:'#ef4444', size:5}); }
-                                b.active = false; break;
-                            }
-                        }
-                    }
-                }
-                else if(GAME.mode === 'defense') {
-                    // DEFENSE COLLISION
-                    for(let e of defenseEnemies) {
-                        if(e.active && b.x > e.x - e.size/2 && b.x < e.x + e.size/2 && b.y > e.y - e.size/2 && b.y < e.y + e.size/2) {
-                             e.hp -= b.power;
-                             e.hitTimer = 3;
-                             if(e.hp <= 0) {
-                                 e.active = false;
-                                 GAME.targetsHit++;
-                                 GAME.score += 150; GAME.coins += 15;
-                                 GAME.hitStreak++;
-                                 checkHitmanCombo();
-                                 updateUI(); SoundSys.impact();
-                                 if (SETTINGS.graphics !== 'low') {
-                                     for(let k=0;k<6;k++) particles.push({x:e.x, y:e.y, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:'#7f1d1d', size:5});
-                                 }
-                             } else {
-                                 SoundSys.impact();
-                             }
-                             b.power -= 20; if(b.power<=0) { b.active=false; break; }
-                        }
-                    }
-                }
-            }
-        }
-        ctx.beginPath(); ctx.moveTo(b.prevX, b.prevY); ctx.lineTo(b.x, b.y); ctx.strokeStyle='#ffffaa'; ctx.lineWidth=3; ctx.stroke();
-    });
-    
-    // ... existing particle/shell/gun update logic ...
-    bullets = bullets.filter(b=>b.active);
-    shells.forEach(s => { if(!GAME.isPaused) { s.x+=s.vx; s.y+=s.vy; s.vy+=GRAVITY; s.angle+=0.2; s.life--; if(s.y>height-20){s.y=height-20;s.vy*=-0.5;s.vx*=0.8;} } if(s.life>0){ ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle); ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-1.5,6,3); ctx.restore(); } }); shells = shells.filter(s=>s.life>0);
-    magazines.forEach(m => { if(!GAME.isPaused) { m.x+=m.vx; m.y+=m.vy; m.vy+=GRAVITY; m.angle+=0.1; if(m.y>height-20){m.y=height-20;m.vy=0;m.vx=0;m.angle=Math.PI/2;} } ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.angle); ctx.fillStyle='#111'; ctx.fillRect(-7,-17,14,34); ctx.fillStyle='#333'; ctx.fillRect(-7,15,16,4); ctx.restore(); });
-    particles.forEach(p => { if(!GAME.isPaused) { p.x+=p.vx; p.y+=p.vy; p.vy+=GRAVITY; p.life-=0.02; } if(p.life>0){ ctx.globalAlpha=p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha=1; } }); particles = particles.filter(p=>p.life>0);
-
-    const wType = GAME.currentWeapon; const gX = GUN.x - GUN.recoilX; const gY = GUN.y; const gA = GUN.angle + GUN.recoilAngle;
-    if(wType==='beretta') drawDetailedBeretta(ctx, gX, gY, gA, GUN.slideOffset);
-    else if(wType==='canik') drawDetailedCanik(ctx, gX, gY, gA, GUN.slideOffset);
-    else if(wType==='magnum') drawDetailedMagnum(ctx, gX, gY, gA, GUN.slideOffset);
-    else if(wType==='fn57') drawDetailedFN57(ctx, gX, gY, gA, GUN.slideOffset);
-    else drawDetailedGlock(ctx, gX, gY, gA, GUN.slideOffset);
-
-    if(HITMAN_ANIM.active) drawHitmanEffect(ctx);
-    if(RANK_UP_ANIM.active) drawRankUpEffect(ctx);
-    if(flashTimer>0 && SETTINGS.graphics !== 'low') { ctx.save(); ctx.translate(flashPos.x, flashPos.y); ctx.rotate(flashPos.angle); ctx.fillStyle = `rgba(255, 200, 50, ${flashTimer/3})`; ctx.beginPath(); ctx.ellipse(15, 0, 40, 15+Math.random()*10, 0, 0, Math.PI*2); ctx.fill(); ctx.restore(); flashTimer--; }
-    if(UPGRADE.active) drawUpgradeEffect();
-
+        if(GAME.mode === 'classic') { let allCleared = true; wallBlocks.forEach(b => { if(b.active) { allCleared = false; const damagePct = b.hp / b.maxHp; const size = b.size; if(b.hitTimer > 0) { b.hitTimer--; ctx.fillStyle = '#fff'; ctx.fillRect(b.x, b.y, size, size); } else { if(b.type === 'metal') { const mCol = `rgba(50, 60, 80, ${damagePct})`; ctx.fillStyle = '#1e293b'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = mCol; ctx.fillRect(b.x + 2, b.y + 2, size - 4, size - 4); } else { const wCol = `rgba(120, 80, 50, ${damagePct})`; ctx.fillStyle = '#3a2510'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = wCol; ctx.fillRect(b.x + 2, b.y + 2, size - 4, size - 4); } } } }); levelCleared = allCleared; } 
+        else if(GAME.mode === 'reflex') { reflexSpawnTimer--; if(reflexSpawnTimer <= 0) { const size = 60 - Math.min(30, GAME.level * 2); const padding = 100; const rx = padding + Math.random() * (width - padding*2); const ry = padding + Math.random() * (height - padding*2); const life = 120 - Math.min(60, GAME.level * 5); reflexTargets.push({x: rx, y: ry, size: size, maxLife: life, life: life, active: true, id: Date.now()+Math.random()}); SoundSys.blip(); reflexSpawnTimer = 60 - Math.min(40, GAME.level * 3); } reflexTargets.forEach(t => { if(!t.active) return; t.life--; if(t.life <= 0) { t.active = false; } else { const lifePct = t.life / t.maxLife; const scale = 0.5 + (lifePct * 0.5); ctx.save(); ctx.translate(t.x, t.y); ctx.scale(scale, scale); ctx.beginPath(); ctx.arc(0, 0, t.size/2, 0, Math.PI*2); ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4; ctx.stroke(); ctx.fillStyle = `rgba(239, 68, 68, 0.2)`; ctx.fill(); ctx.beginPath(); ctx.arc(0, 0, t.size/6, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.beginPath(); ctx.arc(0, 0, (t.size/2) + 5, -Math.PI/2, (-Math.PI/2) + (Math.PI*2 * lifePct), false); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); } }); if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true; ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_targets}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50); } 
+        else if (GAME.mode === 'hostage') { reflexSpawnTimer--; if(reflexSpawnTimer <= 0) { const size = 50; const padding = 100; const rx = padding + Math.random() * (width - padding*2); const ry = padding + Math.random() * (height - padding*2); const life = 90; reflexTargets.push({x: rx, y: ry, size: size, maxLife: life, life: life, active: true, id: Date.now()+Math.random()}); SoundSys.blip(); reflexSpawnTimer = 45 - Math.min(25, GAME.level * 2); } reflexTargets.forEach(t => { if(!t.active) return; t.life--; if(t.life <= 0) t.active = false; else { const lifePct = t.life / t.maxLife; const scale = 0.5 + (lifePct * 0.5); ctx.save(); ctx.translate(t.x, t.y); ctx.scale(scale, scale); ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(0, -10, 15, 0, Math.PI*2); ctx.fill(); ctx.fillRect(-15, 5, 30, 25); ctx.strokeStyle = "#fff"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-20,0); ctx.lineTo(20,0); ctx.moveTo(0,-20); ctx.lineTo(0,20); ctx.stroke(); ctx.restore(); } }); if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true; ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#facc15"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_rescue}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50); } 
+        else if (GAME.mode === 'defense') { defenseSpawnTimer--; let spawnRate = 100 - Math.min(70, GAME.level * 4); if(defenseSpawnTimer <= 0 && defenseEnemies.length < 20) { const size = 50; const speed = 0.8 + (GAME.level * 0.12) + (Math.random() * 0.5); const hp = 30 + (GAME.level * 5); const spawnY = 50 + Math.random() * (height - 100); defenseEnemies.push({ x: width + size, y: spawnY, initialY: spawnY, size: size, hp: hp, maxHp: hp, speed: speed, active: true, jitterPhase: Math.random() * Math.PI * 2, hitTimer: 0 }); defenseSpawnTimer = spawnRate; } defenseEnemies.forEach(e => { if(!e.active) return; e.x -= e.speed; const jitterAmt = 3; e.y = e.initialY + Math.sin(Date.now() * 0.005 + e.jitterPhase) * 20 + Math.sin(Date.now() * 0.05) * jitterAmt; const safeZoneX = GUN.x + 80; if (e.x < safeZoneX) { gameOver('breach'); return; } const hpPct = e.hp / e.maxHp; const hitFlash = e.hitTimer > 0; if(e.hitTimer > 0) e.hitTimer--; ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(Math.sin(Date.now() * 0.01) * 0.1); if(hitFlash) { ctx.fillStyle = '#fff'; ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size); } else { ctx.fillStyle = '#7f1d1d'; ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size); ctx.fillStyle = `rgba(220, 38, 38, ${0.5 + hpPct * 0.5})`; ctx.fillRect(-e.size/2 + 4, -e.size/2 + 4, e.size - 8, e.size - 8); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.moveTo(-10, -5); ctx.lineTo(-20, 0); ctx.lineTo(-10, 5); ctx.fill(); ctx.fillStyle = '#333'; ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size, 5); ctx.fillStyle = '#ef4444'; ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size * hpPct, 5); } ctx.restore(); }); defenseEnemies = defenseEnemies.filter(e => e.active); if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true; ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#ef4444"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_wave}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50); }
+    } else if (GAME.isPaused) { if(GAME.mode === 'classic') { wallBlocks.forEach(b => { if(!b.active) return; const size = b.size; const damagePct = b.hp / b.maxHp; if(b.type === 'metal') { ctx.fillStyle = '#1e293b'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = `rgba(50, 60, 80, ${damagePct})`; ctx.fillRect(b.x+2, b.y+2, size-4, size-4); } else { ctx.fillStyle = '#3a2510'; ctx.fillRect(b.x, b.y, size, size); ctx.fillStyle = `rgba(120, 80, 50, ${damagePct})`; ctx.fillRect(b.x+2, b.y+2, size-4, size-4); } }); } }
+    if(levelCleared && GAME.state==='playing') { GAME.state='leveling'; if (GAME.modeLevels[GAME.mode]) { GAME.modeLevels[GAME.mode]++; } else { GAME.modeLevels[GAME.mode] = 2; } window.saveGame(); if(GAME.mode === 'hostage') { GAME.hostagesSaved++; renderHostageUI(); if(GAME.hostagesSaved >= GAME.totalHostages) { ui.notify.innerText = t.msg_all_saved; ui.notify.style.color = "#22c55e"; setTimeout(() => { GAME.hostagesSaved = 0; renderHostageUI(); }, 3000); } else { ui.notify.innerText = t.msg_saved; ui.notify.style.color = "#facc15"; } } else { ui.notify.innerText = t.msg_level_clear; ui.notify.style.color = "#fff"; } ui.notify.style.opacity=1; setTimeout(()=>{ ui.notify.style.opacity=0; const nextLvl = GAME.modeLevels[GAME.mode]; if(nextLvl < GAME.maxLevel){ startLevel(nextLvl); GAME.state='playing'; } }, 2000); }
+    bullets.forEach(b => { if(!b.active) return; if(!GAME.isPaused) { for(let i=0; i<5; i++) { if(!b.active) break; b.prevX = b.x; b.prevY = b.y; b.x += b.vx/5; b.y += b.vy/5; if(b.x>width || b.y<0 || b.y>height) { b.active=false; break; } if(GAME.mode === 'classic') { for(let w of wallBlocks) { if(w.active && b.x>w.x && b.x<w.x+w.size && b.y>w.y && b.y<w.y+w.size) { w.hp -= b.power; w.hitTimer=3; if(w.hp<=0) { w.active=false; GAME.score+=100; GAME.coins+=10; GAME.stats.totalScore += 100; GAME.stats.totalBlocks++; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++; checkHitmanCombo(); const debColor = w.type === 'metal' ? '#64748b' : '#a05a2c'; if (SETTINGS.graphics !== 'low') { for(let k=0;k<6;k++) particles.push({x:w.x+w.size/2, y:w.y+w.size/2, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:debColor, size:w.size/3}); } } else SoundSys.impact(); b.power -= 20; if(b.power<=0) { b.active=false; break; } } } } else if(GAME.mode === 'reflex' || GAME.mode === 'hostage') { for(let t of reflexTargets) { if(t.active) { const dist = Math.hypot(b.x - t.x, b.y - t.y); if(dist < t.size/2) { t.active = false; GAME.targetsHit++; GAME.score+=200; GAME.coins+=20; GAME.stats.totalScore += 200; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++; if (SETTINGS.graphics !== 'low') { for(let k=0;k<8;k++) particles.push({x:t.x, y:t.y, vx:(Math.random()-0.5)*20, vy:(Math.random()-0.5)*20, life:1, color:'#ef4444', size:5}); } b.active = false; break; } } } } else if(GAME.mode === 'defense') { for(let e of defenseEnemies) { if(e.active && b.x > e.x - e.size/2 && b.x < e.x + e.size/2 && b.y > e.y - e.size/2 && b.y < e.y + e.size/2) { e.hp -= b.power; e.hitTimer = 3; if(e.hp <= 0) { e.active = false; GAME.targetsHit++; GAME.score += 150; GAME.coins += 15; GAME.hitStreak++; checkHitmanCombo(); updateUI(); SoundSys.impact(); if (SETTINGS.graphics !== 'low') { for(let k=0;k<6;k++) particles.push({x:e.x, y:e.y, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:'#7f1d1d', size:5}); } } else { SoundSys.impact(); } b.power -= 20; if(b.power<=0) { b.active=false; break; } } } } } } ctx.beginPath(); ctx.moveTo(b.prevX, b.prevY); ctx.lineTo(b.x, b.y); ctx.strokeStyle='#ffffaa'; ctx.lineWidth=3; ctx.stroke(); });
+    bullets = bullets.filter(b=>b.active); shells.forEach(s => { if(!GAME.isPaused) { s.x+=s.vx; s.y+=s.vy; s.vy+=GRAVITY; s.angle+=0.2; s.life--; if(s.y>height-20){s.y=height-20;s.vy*=-0.5;s.vx*=0.8;} } if(s.life>0){ ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle); ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-1.5,6,3); ctx.restore(); } }); shells = shells.filter(s=>s.life>0); magazines.forEach(m => { if(!GAME.isPaused) { m.x+=m.vx; m.y+=m.vy; m.vy+=GRAVITY; m.angle+=0.1; if(m.y>height-20){m.y=height-20;m.vy=0;m.vx=0;m.angle=Math.PI/2;} } ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.angle); ctx.fillStyle='#111'; ctx.fillRect(-7,-17,14,34); ctx.fillStyle='#333'; ctx.fillRect(-7,15,16,4); ctx.restore(); }); particles.forEach(p => { if(!GAME.isPaused) { p.x+=p.vx; p.y+=p.vy; p.vy+=GRAVITY; p.life-=0.02; } if(p.life>0){ ctx.globalAlpha=p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha=1; } }); particles = particles.filter(p=>p.life>0);
+    const wType = GAME.currentWeapon; const gX = GUN.x - GUN.recoilX; const gY = GUN.y; const gA = GUN.angle + GUN.recoilAngle; if(wType==='beretta') drawDetailedBeretta(ctx, gX, gY, gA, GUN.slideOffset); else if(wType==='canik') drawDetailedCanik(ctx, gX, gY, gA, GUN.slideOffset); else if(wType==='magnum') drawDetailedMagnum(ctx, gX, gY, gA, GUN.slideOffset); else if(wType==='fn57') drawDetailedFN57(ctx, gX, gY, gA, GUN.slideOffset); else drawDetailedGlock(ctx, gX, gY, gA, GUN.slideOffset);
+    if(HITMAN_ANIM.active) drawHitmanEffect(ctx); if(RANK_UP_ANIM.active) drawRankUpEffect(ctx); if(flashTimer>0 && SETTINGS.graphics !== 'low') { ctx.save(); ctx.translate(flashPos.x, flashPos.y); ctx.rotate(flashPos.angle); ctx.fillStyle = `rgba(255, 200, 50, ${flashTimer/3})`; ctx.beginPath(); ctx.ellipse(15, 0, 40, 15+Math.random()*10, 0, 0, Math.PI*2); ctx.fill(); ctx.restore(); flashTimer--; } if(UPGRADE.active) drawUpgradeEffect();
     requestAnimationFrame(loop);
 }
-
 // Drawing Functions
-function drawDetailedGlock(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    const skin = skinOverride || SKINS[GAME.currentSkin];
-    const silencerId = silencerOverride || GAME.currentSilencer;
-    const frameColor = skin.color; const slideColor = skin.slideColor === 'fade' ? null : skin.slideColor;
-    ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.quadraticCurveTo(-15, 20, -18, 45); ctx.lineTo(-12, 60); ctx.lineTo(15, 60); ctx.lineTo(18, 45); ctx.lineTo(15, 18); ctx.quadraticCurveTo(30, 25, 25, 35); ctx.lineTo(15, 35); ctx.lineTo(5, 35); ctx.quadraticCurveTo(-5, 30, 5, 18); ctx.lineTo(15, 5); ctx.fill();
-    
-    // Low Graphics Skip: Stippling
-    if (SETTINGS.graphics === 'high') {
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<50; i++) { const gx = (Math.random()*25) - 10; const gy = (Math.random()*30) + 25; ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI*2); ctx.fill(); }
-    }
-
-    ctx.fillStyle = frameColor; ctx.fillRect(15, 0, 45, 12); ctx.fillStyle = '#000'; ctx.fillRect(45, 10, 5, 2); 
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(10, 20); ctx.quadraticCurveTo(15, 28, 8, 30); ctx.lineTo(6, 30); ctx.lineTo(8, 20); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(8, 24, 2, 6); ctx.fillRect(5, 25, 8, 5); ctx.fillRect(5, 5, 12, 3);
-    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(2, 10, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-8, 12, 2, 0, Math.PI*2); ctx.fill(); 
-    const sX = -10 - slideOffset; const tilt = slideOffset > 5 ? -0.05 : 0; 
-    ctx.save(); ctx.rotate(tilt); ctx.fillStyle = '#444'; ctx.fillRect(30, -14, 15, 12); ctx.fillStyle = '#555'; ctx.fillRect(45, -12, 35, 8); ctx.restore();
-    if(slideOffset > 0) { ctx.fillStyle = '#111'; ctx.fillRect(45, -2, 30, 3); ctx.fillStyle = '#333'; ctx.fillRect(75, -3, 2, 5); }
-    ctx.save(); ctx.translate(sX, 0); 
-    if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor;
-    ctx.beginPath(); ctx.roundRect(0, -18, 85, 20, [2, 2, 0, 0]); ctx.fill();
-    
-    // Low Graphics Skip: Serrations
-    if (SETTINGS.graphics !== 'low') {
-        ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let i=0; i<6; i++) ctx.fillRect(5 + i*3, -16, 1.5, 16); for(let i=0; i<6; i++) ctx.fillRect(65 + i*3, -16, 1.5, 16); 
-    }
-    
-    ctx.fillStyle = '#111'; ctx.fillRect(30, -18, 15, 10); ctx.fillStyle = '#222'; ctx.fillRect(46, -12, 8, 3);
-    ctx.fillStyle = '#111'; ctx.fillRect(2, -21, 6, 3); ctx.fillRect(80, -20, 3, 2); ctx.fillStyle = '#fff'; ctx.fillRect(2, -20, 1, 1); ctx.fillRect(6, -20, 1, 1); ctx.fillStyle = '#0f0'; ctx.fillRect(81, -19, 1.5, 1.5);
-    ctx.fillStyle = slideColor === 'fade' ? 'rgba(0,0,0,0.1)' : slideColor; ctx.beginPath(); ctx.moveTo(85, -18); ctx.lineTo(85, 2); ctx.lineTo(82, 2); ctx.lineTo(82, -18); ctx.fill();
-    drawSkinDetails(ctx, skin, 'glock'); ctx.restore(); drawAttachments(ctx, sX, silencerId, 'glock'); ctx.restore();
-}
-
-function drawDetailedBeretta(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer;
-    const frameColor = skin.id === 'skin_black' ? '#222' : skin.color; const slideColor = skin.id === 'skin_black' ? '#111' : (skin.slideColor === 'fade' ? null : skin.slideColor);
-    ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 0); ctx.quadraticCurveTo(-15, 10, -20, 45); ctx.lineTo(-12, 65); ctx.lineTo(20, 65); ctx.lineTo(22, 45); ctx.quadraticCurveTo(20, 35, 15, 25); ctx.lineTo(35, 25); ctx.quadraticCurveTo(45, 25, 45, 15); ctx.lineTo(40, 5); ctx.lineTo(55, 5); ctx.lineTo(55, 0); ctx.lineTo(-5, 0); ctx.fill();
-    ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.moveTo(-12, 20); ctx.lineTo(-15, 45); ctx.lineTo(-10, 60); ctx.lineTo(15, 60); ctx.lineTo(17, 45); ctx.lineTo(12, 20); ctx.fill();
-    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, 30, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 50, 2.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(25, 15, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(25, 15); ctx.quadraticCurveTo(30, 25, 22, 25); ctx.stroke();
-    ctx.fillStyle = '#222'; const hammerRot = slideOffset > 5 ? 0.5 : 0; ctx.save(); ctx.translate(-18, 5); ctx.rotate(hammerRot); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-5, -8); ctx.quadraticCurveTo(-2, -12, 4, -8); ctx.lineTo(2, 0); ctx.fill(); ctx.restore();
-    ctx.fillStyle = '#333'; ctx.fillRect(15, -14, 80, 8); ctx.fillStyle = '#111'; ctx.fillRect(95, -14, 2, 8);
-    const sX = -10 - slideOffset; ctx.save(); ctx.translate(sX, 0);
-    if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor || '#111';
-    ctx.fillRect(75, -18, 15, 18); ctx.fillRect(0, -18, 35, 18); ctx.fillRect(35, -2, 40, 2); 
-    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(10, -10, 4, 0, Math.PI*2); ctx.fill(); ctx.fillRect(6, -10, 12, 3); ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(10, -6, 1, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#000'; ctx.fillRect(2, -21, 6, 4); ctx.fillRect(82, -21, 2, 4);
-    drawSkinDetails(ctx, skin, 'beretta'); ctx.restore(); drawAttachments(ctx, sX, silencerId, 'beretta'); ctx.restore();
-}
-
-function drawDetailedCanik(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer;
-    const frameColor = skin.id === 'skin_black' ? '#1c1c1c' : skin.color; const slideColor = skin.id === 'skin_black' ? '#2a2a2a' : (skin.slideColor === 'fade' ? null : skin.slideColor);
-    ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 0); ctx.quadraticCurveTo(-15, 15, -18, 50); ctx.lineTo(-12, 70); ctx.lineTo(22, 70); ctx.lineTo(25, 45); ctx.quadraticCurveTo(22, 35, 15, 30); ctx.lineTo(35, 30); ctx.quadraticCurveTo(45, 30, 45, 20); ctx.lineTo(45, 5); ctx.lineTo(60, 5); ctx.lineTo(60, 0); ctx.lineTo(-5, 0); ctx.fill();
-    
-    if (SETTINGS.graphics !== 'low') {
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.roundRect(-8, 25, 25, 35, 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.05)'; for(let i=0; i<30; i++) { ctx.beginPath(); ctx.arc(-5 + Math.random()*20, 30 + Math.random()*25, 0.8, 0, Math.PI*2); ctx.fill(); }
-    }
-
-    ctx.fillStyle = '#111'; ctx.fillRect(-10, 70, 30, 4); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(25, 10); ctx.quadraticCurveTo(30, 20, 25, 25); ctx.lineTo(28, 25); ctx.lineTo(28, 10); ctx.fill(); ctx.fillStyle = '#b91c1c'; ctx.fillRect(26, 18, 2, 6);
-    ctx.fillStyle = '#000'; ctx.fillRect(18, 5, 8, 3); ctx.fillStyle = '#222'; ctx.fillRect(5, 0, 15, 2);
-    const sX = -12 - slideOffset; const tilt = slideOffset > 5 ? -0.05 : 0; ctx.save(); ctx.rotate(tilt); ctx.fillStyle = '#333'; ctx.fillRect(30, -13, 15, 11); ctx.fillStyle = '#444'; ctx.fillRect(45, -11, 40, 7); ctx.restore(); if(slideOffset > 0) { ctx.fillStyle = '#111'; ctx.fillRect(45, -1, 35, 3); }
-    ctx.save(); ctx.translate(sX, 0); if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor || '#2a2a2a';
-    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(2, -20); ctx.lineTo(88, -20); ctx.lineTo(90, -15); ctx.lineTo(90, 2); ctx.lineTo(0, 2); ctx.fill();
-    if (slideOffset < 5) { ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(1, -10, 1.5, 0, Math.PI*2); ctx.fill(); }
-    
-    if (SETTINGS.graphics !== 'low') {
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<5; i++) ctx.fillRect(5 + i*3.5, -18, 1.5, 14); for(let i=0; i<4; i++) ctx.fillRect(70 + i*3.5, -18, 1.5, 14);
-    }
-    
-    ctx.fillStyle = '#111'; ctx.fillRect(30, -18, 15, 10); ctx.fillStyle = '#222'; ctx.fillRect(46, -14, 8, 3);
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, -25); ctx.lineTo(8, -25); ctx.lineTo(5, -20); ctx.fill(); ctx.fillRect(86, -20, 4, 4); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(88, -19, 1, 0, Math.PI*2); ctx.fill();
-    drawSkinDetails(ctx, skin, 'canik'); ctx.restore(); drawAttachments(ctx, sX, silencerId, 'canik'); ctx.restore();
-}
-
-function drawDetailedMagnum(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    const chromeGrad = ctx.createLinearGradient(0, -20, 0, 20); chromeGrad.addColorStop(0, "#e8e8e8"); chromeGrad.addColorStop(0.2, "#fff"); chromeGrad.addColorStop(0.5, "#d4d4d4"); chromeGrad.addColorStop(0.8, "#fff"); chromeGrad.addColorStop(1, "#a3a3a3");
-    const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer;
-    const isChrome = skin.id === 'skin_black' || skin.id === 'skin_chrome' || skin.id === 'skin_silver';
-    const baseColor = isChrome ? chromeGrad : skin.color; const slideFill = (skin.slideColor === 'fade') ? 'url(#grad_fade)' : (isChrome ? chromeGrad : skin.slideColor);
-    ctx.fillStyle = baseColor; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-20, 20); ctx.lineTo(-25, 50); ctx.lineTo(-20, 75); ctx.lineTo(25, 75); ctx.lineTo(30, 45); ctx.lineTo(25, 35); ctx.lineTo(50, 35); ctx.lineTo(55, 25); ctx.lineTo(55, 5); ctx.lineTo(90, 5); ctx.lineTo(90, 0); ctx.lineTo(-10, 0); ctx.fill();
-    ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.moveTo(-15, 25); ctx.lineTo(-18, 50); ctx.lineTo(-15, 70); ctx.lineTo(20, 70); ctx.lineTo(25, 45); ctx.lineTo(20, 25); ctx.fill(); ctx.fillStyle = '#222'; for(let i=0; i<5; i++) ctx.fillRect(-10, 30+i*8, 30, 2);
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(35, 15, 8, 0.5, 2.5); ctx.stroke();
-    ctx.fillStyle = '#333'; const hammerRot = slideOffset > 5 ? 0.8 : 0; ctx.save(); ctx.translate(-22, 5); ctx.rotate(hammerRot); ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.restore();
-    ctx.fillStyle = slideFill; ctx.beginPath(); ctx.moveTo(55, -20); ctx.lineTo(160, -20); ctx.lineTo(160, 5); ctx.lineTo(55, 5); ctx.fill();
-    if (SETTINGS.graphics !== 'low') {
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<8; i++) ctx.fillRect(60 + i*12, -21, 8, 3);
-    }
-    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.moveTo(65, -10); ctx.lineTo(150, -10); ctx.lineTo(150, -2); ctx.lineTo(65, -2); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(55, 5, 40, 4);
-    drawSkinDetails(ctx, skin, 'magnum');
-    const sX = -slideOffset; ctx.save(); ctx.translate(sX, 0); ctx.fillStyle = slideFill; ctx.beginPath(); ctx.moveTo(-10, -20); ctx.lineTo(55, -20); ctx.lineTo(55, 5); ctx.lineTo(-10, 5); ctx.fill();
-    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(15, -15); ctx.lineTo(15, -9); ctx.fill(); ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let i=0; i<5; i++) ctx.fillRect(0 + i*5, -15, 2, 12); ctx.fillStyle = '#111'; ctx.fillRect(-5, -23, 10, 3); ctx.restore();
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(155, -20); ctx.lineTo(155, -28); ctx.lineTo(160, -28); ctx.lineTo(160, -20); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(160, -8, 3.5, 0, Math.PI*2); ctx.fill();
-    drawAttachments(ctx, -10, silencerId, 'magnum'); ctx.restore();
-}
-
-function drawDetailedFN57(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer;
-    const frameColor = skin.id === 'skin_black' ? '#222' : skin.color; const slideColor = skin.id === 'skin_black' ? '#1a1a1a' : (skin.slideColor === 'fade' ? null : skin.slideColor);
-    ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.quadraticCurveTo(-15, 15, -15, 50); ctx.lineTo(-10, 70); ctx.lineTo(25, 70); ctx.lineTo(28, 45); ctx.quadraticCurveTo(25, 35, 15, 30); ctx.lineTo(40, 30); ctx.quadraticCurveTo(50, 30, 50, 20); ctx.lineTo(50, 5); ctx.lineTo(75, 5); ctx.lineTo(75, 0); ctx.lineTo(-5, 0); ctx.fill();
-    
-    if(SETTINGS.graphics !== 'low') {
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.rect(-8, 25, 28, 35); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.05)'; for(let r=0; r<6; r++) { for(let c=0; c<5; c++) { ctx.fillRect(-5 + c*5, 30 + r*5, 2, 2); }}
-    }
-
-    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(32, 15, 6, 0.5, 2.5); ctx.stroke(); ctx.fillStyle = '#555'; ctx.fillRect(28, 8, 12, 4); ctx.fillStyle = '#111'; ctx.fillRect(15, 5, 5, 5);
-    const sX = -10 - slideOffset; ctx.save(); ctx.translate(sX, 0); if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor || '#1a1a1a';
-    ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(95, -18); ctx.lineTo(95, 2); ctx.lineTo(0, 2); ctx.fill();
-    if(SETTINGS.graphics !== 'low') {
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'; for(let i=0; i<4; i++) ctx.beginPath(), ctx.ellipse(5 + i*4, -8, 1.5, 6, 0, 0, Math.PI*2), ctx.fill(); for(let i=0; i<3; i++) ctx.beginPath(), ctx.ellipse(80 + i*4, -8, 1.5, 6, 0, 0, Math.PI*2), ctx.fill();
-    }
-    ctx.fillStyle = '#050505'; ctx.fillRect(35, -18, 18, 10); ctx.fillStyle = '#222'; ctx.fillRect(54, -14, 6, 3);
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(0, -26); ctx.lineTo(10, -26); ctx.lineTo(10, -18); ctx.fill(); ctx.fillRect(90, -24, 4, 6);
-    drawSkinDetails(ctx, skin, 'fn57'); ctx.restore();
-    const bTilt = slideOffset > 5 ? -0.02 : 0; ctx.save(); ctx.rotate(bTilt); ctx.fillStyle = '#333'; ctx.fillRect(35, -12, 18, 8); if(slideOffset > 0) { ctx.fillStyle='#222'; ctx.fillRect(53, -12, 40, 6); } ctx.restore();
-    drawAttachments(ctx, sX, silencerId, 'fn57'); ctx.restore();
-}
-
-function drawSkinDetails(ctx, skin, weaponType) {
-    if (SETTINGS.graphics === 'low') return; // Skip details on low graphics
-    let cx = 40; let cy = -8; let stripeYStart = -16; let stripeHeight = 3; let starBaseX = 5;
-    if (weaponType === 'beretta') { cx = 15; starBaseX = -5; } else if (weaponType === 'magnum') { cx = 90; starBaseX = 65; cy = -12; stripeYStart = -20; } else if (weaponType === 'fn57') { cx = 50; }
-    if (skin.id === 'skin_turkish') { ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#e30a17'; ctx.beginPath(); ctx.arc(cx+2, cy, 3, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+8, cy, 1, 0, Math.PI*2); ctx.fill(); }
-    if (skin.id === 'skin_usa') { ctx.fillStyle = '#fff'; for(let i=0; i<3; i++) { ctx.fillRect(cx, stripeYStart + (i*6), 45, stripeHeight); } ctx.fillStyle = '#3c3b6e'; ctx.fillRect(starBaseX, stripeYStart-2, 40, 20); ctx.fillStyle = '#fff'; for(let r=0; r<3; r++) { for(let c=0; c<4; c++) { ctx.beginPath(); ctx.arc(starBaseX + 5 + c*10, stripeYStart + 2 + r*6, 1.5, 0, Math.PI*2); ctx.fill(); } } }
-    if (skin.id === 'skin_chrome') { ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(85, -18); ctx.lineTo(60, -10); ctx.fill(); }
-}
-
-function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock') {
-    const isPreview = ctx.canvas.classList.contains('preview-canvas'); const silencerId = silencerIdOverride || GAME.currentSilencer;
-    let shouldDraw = false; if (isPreview) { shouldDraw = !!silencerIdOverride; } else { shouldDraw = GUN.attachments.silencer; } if (isPreview && !silencerIdOverride) shouldDraw = true;
-    let silOffset = 0; let scopeOffset = 0; let laserX = 18; let laserY = 12;
-    if (weaponType === 'beretta') { silOffset = 15; } if (weaponType === 'canik') { silOffset = 10; } if (weaponType === 'fn57') { silOffset = 15; }
-    if (weaponType === 'magnum') { silOffset = 80; scopeOffset = 65; laserX = 60; laserY = 8; }
-    if (shouldDraw && silencerId) { 
-        if (silencerId === 'silencer_gold') { ctx.fillStyle = '#ffd700'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#B8860B'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); } 
-        else { ctx.fillStyle = '#222'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#444'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); }
-    }
-    const showAccessories = isPreview || GUN.attachments.scope;
-    if(showAccessories && GUN.attachments.scope) { const rX = sX + 15 + scopeOffset; ctx.fillStyle = '#111'; ctx.fillRect(rX, -18, 20, 4); ctx.beginPath(); ctx.moveTo(rX, -18); ctx.lineTo(rX, -28); ctx.lineTo(rX+20, -28); ctx.lineTo(rX+20, -18); ctx.fill(); ctx.fillStyle = 'rgba(0,255,255,0.2)'; ctx.fillRect(rX+2, -26, 16, 8); ctx.fillStyle = 'red'; ctx.fillRect(rX+9, -23, 2, 2); }
-    const showLaser = isPreview || GUN.attachments.laser;
-    if(showLaser && GUN.attachments.laser) { ctx.fillStyle = '#111'; ctx.fillRect(laserX, laserY, 25, 8); ctx.fillStyle = '#eab308'; ctx.fillRect(laserX + 22, laserY + 2, 2, 4); }
-}
-
-function resize() {
-    // RESOLUTION HANDLING FROM SETTINGS
-    const resString = SETTINGS.resolution || '1920x1080';
-    const [wStr, hStr] = resString.split('x');
-    const targetW = parseInt(wStr);
-    const targetH = parseInt(hStr);
-    
-    // Maintain Aspect Ratio for CSS (Always fit to window)
-    const targetAspect = targetW / targetH;
-    const windowW = window.innerWidth; 
-    const windowH = window.innerHeight;
-    
-    let cssW, cssH;
-    
-    // Fit to window logic (letterbox)
-    if (windowW / windowH > targetAspect) { 
-        cssH = windowH; 
-        cssW = cssH * targetAspect; 
-    } else { 
-        cssW = windowW; 
-        cssH = cssW / targetAspect; 
-    }
-    
-    gameContainer.style.width = `${cssW}px`; 
-    gameContainer.style.height = `${cssH}px`;
-    
-    // ACTUAL CANVAS RESOLUTION (Controls sharpness/performance)
-    width = canvas.width = targetW; 
-    height = canvas.height = targetH;
-    
-    // Game Elements Positioning Relative to Resolution
-    GUN.y = height / 2; 
-    GUN.x = width * 0.2;
-    
-    containerRect = gameContainer.getBoundingClientRect();
-    if(GAME.state === 'playing') startLevel(GAME.level);
-}
-
-// === NEW: RENDER PREVIEWS (Fixed Error) ===
-function renderPreviews() {
-    const previews = document.querySelectorAll('.preview-canvas');
-    previews.forEach(canvas => {
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        
-        const skinId = canvas.getAttribute('data-skin');
-        const weaponId = canvas.getAttribute('data-weapon');
-        
-        ctx.save();
-        // Center the gun in the preview canvas
-        const cx = w / 2;
-        const cy = h / 2;
-        
-        // Scale down slightly to fit
-        ctx.translate(cx, cy);
-        ctx.scale(1.2, 1.2); 
-        
-        if (skinId) {
-            // Previewing a Skin (Assume Glock for skin preview consistency)
-            const skin = SKINS[skinId];
-            if (skin.type === 'silencer') {
-                 // Draw Glock with this silencer
-                 drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId);
-            } else {
-                 // Draw Glock with this skin
-                 drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null);
-            }
-        } else if (weaponId) {
-            // Previewing a Weapon
-            if(weaponId === 'glock') drawDetailedGlock(ctx, 0, 0, 0, 0);
-            else if(weaponId === 'beretta') drawDetailedBeretta(ctx, 0, 0, 0, 0);
-            else if(weaponId === 'canik') drawDetailedCanik(ctx, 0, 0, 0, 0);
-            else if(weaponId === 'magnum') drawDetailedMagnum(ctx, 0, 0, 0, 0);
-            else if(weaponId === 'fn57') drawDetailedFN57(ctx, 0, 0, 0, 0);
-        }
-        
-        ctx.restore();
-    });
-}
-
-// === NEW: RENDER RANK INFO ===
-function renderRankInfo() {
-    ui.rankListContainer.innerHTML = '';
-    const currentRankIdx = getRankData().index;
-    
-    RANK_SYSTEM.forEach((rank, idx) => {
-        const div = document.createElement('div');
-        const unlocked = idx <= currentRankIdx;
-        div.className = `rank-item ${unlocked ? 'unlocked' : ''}`;
-        
-        div.innerHTML = `
-            <svg style="width:40px; height:40px; fill:${unlocked ? rank.color : '#555'};" viewBox="0 0 24 24"><path d="${rank.icon}"/></svg>
-            <div style="flex:1;">
-                <div style="color:${unlocked ? '#fff' : '#777'}; font-weight:bold;">${rank.name}</div>
-                <div style="color:#666; font-size:0.8rem;">LEVEL ${rank.min} - ${rank.max}</div>
-            </div>
-            ${rank.reward > 0 ? `<div style="color:#eab308; font-size:0.8rem; font-weight:bold;">+${rank.reward} $</div>` : ''}
-        `;
-        ui.rankListContainer.appendChild(div);
-    });
-}
-
-// === NEW: RENDER PROFILE ===
-function renderProfile() {
-    document.getElementById('prof-score').innerText = GAME.stats.totalScore.toLocaleString();
-    document.getElementById('prof-cash').innerText = GAME.stats.totalScore.toLocaleString() + " $ (Lifetime)"; // Or simple cash
-    document.getElementById('prof-rank').innerText = getFullRankName();
-    document.getElementById('prof-rank').style.color = getRankData().color;
-    document.getElementById('prof-level').innerText = GAME.level;
-    
-    // Weapon Usage
-    const list = document.getElementById('weapon-usage-list');
-    list.innerHTML = '';
-    Object.keys(GAME.weaponUsage).forEach(key => {
-        if(GAME.weaponUsage[key] > 1000) { // Only show used weapons
-            const row = document.createElement('div');
-            row.className = 'stat-row';
-            const name = WEAPONS[key] ? WEAPONS[key].name : key;
-            const seconds = Math.floor(GAME.weaponUsage[key] / 1000);
-            const mins = Math.floor(seconds / 60);
-            row.innerHTML = `<span style="color:#aaa;">${name}</span><span style="color:#fff;">${mins}m</span>`;
-            list.appendChild(row);
-        }
-    });
-
-    // Medals
-    const mList = document.getElementById('medal-list');
-    mList.innerHTML = '';
-    MEDALS.forEach(m => {
-        const unlocked = GAME.unlockedMedals.includes(m.id);
-        const div = document.createElement('div');
-        div.className = `medal-item ${unlocked ? 'unlocked' : ''}`;
-        div.title = unlocked ? "UNLOCKED" : "LOCKED";
-        div.innerHTML = `
-            <div style="font-size:2rem; margin-bottom:5px;">${m.icon}</div>
-            <div style="font-weight:bold; font-size:0.8rem; color:${unlocked?'#fff':'#777'}">${m.name}</div>
-            <div style="font-size:0.6rem; color:#aaa; line-height:1.2;">${m.desc}</div>
-        `;
-        mList.appendChild(div);
-    });
-}
-
-// === NEW: CHECK MEDALS ===
-function checkMedals() {
-    MEDALS.forEach(m => {
-        if(!GAME.unlockedMedals.includes(m.id)) {
-            if(m.check(GAME)) {
-                GAME.unlockedMedals.push(m.id);
-                SoundSys.rankup();
-                ui.notify.innerText = "MEDAL UNLOCKED: " + m.name.toUpperCase();
-                ui.notify.style.color = "#eab308";
-                ui.notify.style.opacity = 1;
-                setTimeout(() => { ui.notify.style.opacity = 0; }, 3000);
-                window.saveGame();
-            }
-        }
-    });
-}
-
+function drawDetailedGlock(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) { ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer; const frameColor = skin.color; const slideColor = skin.slideColor === 'fade' ? null : skin.slideColor; ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.quadraticCurveTo(-15, 20, -18, 45); ctx.lineTo(-12, 60); ctx.lineTo(15, 60); ctx.lineTo(18, 45); ctx.lineTo(15, 18); ctx.quadraticCurveTo(30, 25, 25, 35); ctx.lineTo(15, 35); ctx.lineTo(5, 35); ctx.quadraticCurveTo(-5, 30, 5, 18); ctx.lineTo(15, 5); ctx.fill(); if (SETTINGS.graphics === 'high') { ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<50; i++) { const gx = (Math.random()*25) - 10; const gy = (Math.random()*30) + 25; ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI*2); ctx.fill(); } } ctx.fillStyle = frameColor; ctx.fillRect(15, 0, 45, 12); ctx.fillStyle = '#000'; ctx.fillRect(45, 10, 5, 2); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(10, 20); ctx.quadraticCurveTo(15, 28, 8, 30); ctx.lineTo(6, 30); ctx.lineTo(8, 20); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(8, 24, 2, 6); ctx.fillRect(5, 25, 8, 5); ctx.fillRect(5, 5, 12, 3); ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(2, 10, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-8, 12, 2, 0, Math.PI*2); ctx.fill(); const sX = -10 - slideOffset; const tilt = slideOffset > 5 ? -0.05 : 0; ctx.save(); ctx.rotate(tilt); ctx.fillStyle = '#444'; ctx.fillRect(30, -14, 15, 12); ctx.fillStyle = '#555'; ctx.fillRect(45, -12, 35, 8); ctx.restore(); if(slideOffset > 0) { ctx.fillStyle = '#111'; ctx.fillRect(45, -2, 30, 3); ctx.fillStyle = '#333'; ctx.fillRect(75, -3, 2, 5); } ctx.save(); ctx.translate(sX, 0); if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor; ctx.beginPath(); ctx.roundRect(0, -18, 85, 20, [2, 2, 0, 0]); ctx.fill(); if (SETTINGS.graphics !== 'low') { ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let i=0; i<6; i++) ctx.fillRect(5 + i*3, -16, 1.5, 16); for(let i=0; i<6; i++) ctx.fillRect(65 + i*3, -16, 1.5, 16); } ctx.fillStyle = '#111'; ctx.fillRect(30, -18, 15, 10); ctx.fillStyle = '#222'; ctx.fillRect(46, -12, 8, 3); ctx.fillStyle = '#111'; ctx.fillRect(2, -21, 6, 3); ctx.fillRect(80, -20, 3, 2); ctx.fillStyle = '#fff'; ctx.fillRect(2, -20, 1, 1); ctx.fillRect(6, -20, 1, 1); ctx.fillStyle = '#0f0'; ctx.fillRect(81, -19, 1.5, 1.5); ctx.fillStyle = slideColor === 'fade' ? 'rgba(0,0,0,0.1)' : slideColor; ctx.beginPath(); ctx.moveTo(85, -18); ctx.lineTo(85, 2); ctx.lineTo(82, 2); ctx.lineTo(82, -18); ctx.fill(); drawSkinDetails(ctx, skin, 'glock'); ctx.restore(); drawAttachments(ctx, sX, silencerId, 'glock'); ctx.restore(); }
+function drawDetailedBeretta(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) { ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer; const frameColor = skin.id === 'skin_black' ? '#222' : skin.color; const slideColor = skin.id === 'skin_black' ? '#111' : (skin.slideColor === 'fade' ? null : skin.slideColor); ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 0); ctx.quadraticCurveTo(-15, 10, -20, 45); ctx.lineTo(-12, 65); ctx.lineTo(20, 65); ctx.lineTo(22, 45); ctx.quadraticCurveTo(20, 35, 15, 25); ctx.lineTo(35, 25); ctx.quadraticCurveTo(45, 25, 45, 15); ctx.lineTo(40, 5); ctx.lineTo(55, 5); ctx.lineTo(55, 0); ctx.lineTo(-5, 0); ctx.fill(); ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.moveTo(-12, 20); ctx.lineTo(-15, 45); ctx.lineTo(-10, 60); ctx.lineTo(15, 60); ctx.lineTo(17, 45); ctx.lineTo(12, 20); ctx.fill(); ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, 30, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 50, 2.5, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(25, 15, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(25, 15); ctx.quadraticCurveTo(30, 25, 22, 25); ctx.stroke(); ctx.fillStyle = '#222'; const hammerRot = slideOffset > 5 ? 0.5 : 0; ctx.save(); ctx.translate(-18, 5); ctx.rotate(hammerRot); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-5, -8); ctx.quadraticCurveTo(-2, -12, 4, -8); ctx.lineTo(2, 0); ctx.fill(); ctx.restore(); ctx.fillStyle = '#333'; ctx.fillRect(15, -14, 80, 8); ctx.fillStyle = '#111'; ctx.fillRect(95, -14, 2, 8); const sX = -10 - slideOffset; ctx.save(); ctx.translate(sX, 0); if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor || '#111'; ctx.fillRect(75, -18, 15, 18); ctx.fillRect(0, -18, 35, 18); ctx.fillRect(35, -2, 40, 2); ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(10, -10, 4, 0, Math.PI*2); ctx.fill(); ctx.fillRect(6, -10, 12, 3); ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(10, -6, 1, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(2, -21, 6, 4); ctx.fillRect(82, -21, 2, 4); drawSkinDetails(ctx, skin, 'beretta'); ctx.restore(); drawAttachments(ctx, sX, silencerId, 'beretta'); ctx.restore(); }
+function drawDetailedCanik(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) { ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer; const frameColor = skin.id === 'skin_black' ? '#1c1c1c' : skin.color; const slideColor = skin.id === 'skin_black' ? '#2a2a2a' : (skin.slideColor === 'fade' ? null : skin.slideColor); ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 0); ctx.quadraticCurveTo(-15, 15, -18, 50); ctx.lineTo(-12, 70); ctx.lineTo(22, 70); ctx.lineTo(25, 45); ctx.quadraticCurveTo(22, 35, 15, 30); ctx.lineTo(35, 30); ctx.quadraticCurveTo(45, 30, 45, 20); ctx.lineTo(45, 5); ctx.lineTo(60, 5); ctx.lineTo(60, 0); ctx.lineTo(-5, 0); ctx.fill(); if (SETTINGS.graphics !== 'low') { ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.roundRect(-8, 25, 25, 35, 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.05)'; for(let i=0; i<30; i++) { ctx.beginPath(); ctx.arc(-5 + Math.random()*20, 30 + Math.random()*25, 0.8, 0, Math.PI*2); ctx.fill(); } } ctx.fillStyle = '#111'; ctx.fillRect(-10, 70, 30, 4); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(25, 10); ctx.quadraticCurveTo(30, 20, 25, 25); ctx.lineTo(28, 25); ctx.lineTo(28, 10); ctx.fill(); ctx.fillStyle = '#b91c1c'; ctx.fillRect(26, 18, 2, 6); ctx.fillStyle = '#000'; ctx.fillRect(18, 5, 8, 3); ctx.fillStyle = '#222'; ctx.fillRect(5, 0, 15, 2); const sX = -12 - slideOffset; const tilt = slideOffset > 5 ? -0.05 : 0; ctx.save(); ctx.rotate(tilt); ctx.fillStyle = '#333'; ctx.fillRect(30, -13, 15, 11); ctx.fillStyle = '#444'; ctx.fillRect(45, -11, 40, 7); ctx.restore(); if(slideOffset > 0) { ctx.fillStyle = '#111'; ctx.fillRect(45, -1, 35, 3); } ctx.save(); ctx.translate(sX, 0); if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor || '#2a2a2a'; ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(2, -20); ctx.lineTo(88, -20); ctx.lineTo(90, -15); ctx.lineTo(90, 2); ctx.lineTo(0, 2); ctx.fill(); if (slideOffset < 5) { ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(1, -10, 1.5, 0, Math.PI*2); ctx.fill(); } if (SETTINGS.graphics !== 'low') { ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<5; i++) ctx.fillRect(5 + i*3.5, -18, 1.5, 14); for(let i=0; i<4; i++) ctx.fillRect(70 + i*3.5, -18, 1.5, 14); } ctx.fillStyle = '#111'; ctx.fillRect(30, -18, 15, 10); ctx.fillStyle = '#222'; ctx.fillRect(46, -14, 8, 3); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, -25); ctx.lineTo(8, -25); ctx.lineTo(5, -20); ctx.fill(); ctx.fillRect(86, -20, 4, 4); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(88, -19, 1, 0, Math.PI*2); ctx.fill(); drawSkinDetails(ctx, skin, 'canik'); ctx.restore(); drawAttachments(ctx, sX, silencerId, 'canik'); ctx.restore(); }
+function drawDetailedMagnum(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) { ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const chromeGrad = ctx.createLinearGradient(0, -20, 0, 20); chromeGrad.addColorStop(0, "#e8e8e8"); chromeGrad.addColorStop(0.2, "#fff"); chromeGrad.addColorStop(0.5, "#d4d4d4"); chromeGrad.addColorStop(0.8, "#fff"); chromeGrad.addColorStop(1, "#a3a3a3"); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer; const isChrome = skin.id === 'skin_black' || skin.id === 'skin_chrome' || skin.id === 'skin_silver'; const baseColor = isChrome ? chromeGrad : skin.color; const slideFill = (skin.slideColor === 'fade') ? 'url(#grad_fade)' : (isChrome ? chromeGrad : skin.slideColor); ctx.fillStyle = baseColor; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-20, 20); ctx.lineTo(-25, 50); ctx.lineTo(-20, 75); ctx.lineTo(25, 75); ctx.lineTo(30, 45); ctx.lineTo(25, 35); ctx.lineTo(50, 35); ctx.lineTo(55, 25); ctx.lineTo(55, 5); ctx.lineTo(90, 5); ctx.lineTo(90, 0); ctx.lineTo(-10, 0); ctx.fill(); ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.moveTo(-15, 25); ctx.lineTo(-18, 50); ctx.lineTo(-15, 70); ctx.lineTo(20, 70); ctx.lineTo(25, 45); ctx.lineTo(20, 25); ctx.fill(); ctx.fillStyle = '#222'; for(let i=0; i<5; i++) ctx.fillRect(-10, 30+i*8, 30, 2); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(35, 15, 8, 0.5, 2.5); ctx.stroke(); ctx.fillStyle = '#333'; const hammerRot = slideOffset > 5 ? 0.8 : 0; ctx.save(); ctx.translate(-22, 5); ctx.rotate(hammerRot); ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.restore(); ctx.fillStyle = slideFill; ctx.beginPath(); ctx.moveTo(55, -20); ctx.lineTo(160, -20); ctx.lineTo(160, 5); ctx.lineTo(55, 5); ctx.fill(); if (SETTINGS.graphics !== 'low') { ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<8; i++) ctx.fillRect(60 + i*12, -21, 8, 3); } ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.moveTo(65, -10); ctx.lineTo(150, -10); ctx.lineTo(150, -2); ctx.lineTo(65, -2); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(55, 5, 40, 4); drawSkinDetails(ctx, skin, 'magnum'); const sX = -slideOffset; ctx.save(); ctx.translate(sX, 0); ctx.fillStyle = slideFill; ctx.beginPath(); ctx.moveTo(-10, -20); ctx.lineTo(55, -20); ctx.lineTo(55, 5); ctx.lineTo(-10, 5); ctx.fill(); ctx.fillStyle = '#222'; ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(15, -15); ctx.lineTo(15, -9); ctx.fill(); ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let i=0; i<5; i++) ctx.fillRect(0 + i*5, -15, 2, 12); ctx.fillStyle = '#111'; ctx.fillRect(-5, -23, 10, 3); ctx.restore(); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(155, -20); ctx.lineTo(155, -28); ctx.lineTo(160, -28); ctx.lineTo(160, -20); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(160, -8, 3.5, 0, Math.PI*2); ctx.fill(); drawAttachments(ctx, -10, silencerId, 'magnum'); ctx.restore(); }
+function drawDetailedFN57(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) { ctx.save(); ctx.translate(x, y); ctx.rotate(angle); const skin = skinOverride || SKINS[GAME.currentSkin]; const silencerId = silencerOverride || GAME.currentSilencer; const frameColor = skin.id === 'skin_black' ? '#222' : skin.color; const slideColor = skin.id === 'skin_black' ? '#1a1a1a' : (skin.slideColor === 'fade' ? null : skin.slideColor); ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.quadraticCurveTo(-15, 15, -15, 50); ctx.lineTo(-10, 70); ctx.lineTo(25, 70); ctx.lineTo(28, 45); ctx.quadraticCurveTo(25, 35, 15, 30); ctx.lineTo(40, 30); ctx.quadraticCurveTo(50, 30, 50, 20); ctx.lineTo(50, 5); ctx.lineTo(75, 5); ctx.lineTo(75, 0); ctx.lineTo(-5, 0); ctx.fill(); if(SETTINGS.graphics !== 'low') { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.rect(-8, 25, 28, 35); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.05)'; for(let r=0; r<6; r++) { for(let c=0; c<5; c++) { ctx.fillRect(-5 + c*5, 30 + r*5, 2, 2); }} } ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(32, 15, 6, 0.5, 2.5); ctx.stroke(); ctx.fillStyle = '#555'; ctx.fillRect(28, 8, 12, 4); ctx.fillStyle = '#111'; ctx.fillRect(15, 5, 5, 5); const sX = -10 - slideOffset; ctx.save(); ctx.translate(sX, 0); if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor || '#1a1a1a'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(95, -18); ctx.lineTo(95, 2); ctx.lineTo(0, 2); ctx.fill(); if(SETTINGS.graphics !== 'low') { ctx.fillStyle = 'rgba(0,0,0,0.4)'; for(let i=0; i<4; i++) ctx.beginPath(), ctx.ellipse(5 + i*4, -8, 1.5, 6, 0, 0, Math.PI*2), ctx.fill(); for(let i=0; i<3; i++) ctx.beginPath(), ctx.ellipse(80 + i*4, -8, 1.5, 6, 0, 0, Math.PI*2), ctx.fill(); } ctx.fillStyle = '#050505'; ctx.fillRect(35, -18, 18, 10); ctx.fillStyle = '#222'; ctx.fillRect(54, -14, 6, 3); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(0, -26); ctx.lineTo(10, -26); ctx.lineTo(10, -18); ctx.fill(); ctx.fillRect(90, -24, 4, 6); drawSkinDetails(ctx, skin, 'fn57'); ctx.restore(); const bTilt = slideOffset > 5 ? -0.02 : 0; ctx.save(); ctx.rotate(bTilt); ctx.fillStyle = '#333'; ctx.fillRect(35, -12, 18, 8); if(slideOffset > 0) { ctx.fillStyle='#222'; ctx.fillRect(53, -12, 40, 6); } ctx.restore(); drawAttachments(ctx, sX, silencerId, 'fn57'); ctx.restore(); }
+function drawSkinDetails(ctx, skin, weaponType) { if (SETTINGS.graphics === 'low') return; let cx = 40; let cy = -8; let stripeYStart = -16; let stripeHeight = 3; let starBaseX = 5; if (weaponType === 'beretta') { cx = 15; starBaseX = -5; } else if (weaponType === 'magnum') { cx = 90; starBaseX = 65; cy = -12; stripeYStart = -20; } else if (weaponType === 'fn57') { cx = 50; } if (skin.id === 'skin_turkish') { ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#e30a17'; ctx.beginPath(); ctx.arc(cx+2, cy, 3, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+8, cy, 1, 0, Math.PI*2); ctx.fill(); } if (skin.id === 'skin_usa') { ctx.fillStyle = '#fff'; for(let i=0; i<3; i++) { ctx.fillRect(cx, stripeYStart + (i*6), 45, stripeHeight); } ctx.fillStyle = '#3c3b6e'; ctx.fillRect(starBaseX, stripeYStart-2, 40, 20); ctx.fillStyle = '#fff'; for(let r=0; r<3; r++) { for(let c=0; c<4; c++) { ctx.beginPath(); ctx.arc(starBaseX + 5 + c*10, stripeYStart + 2 + r*6, 1.5, 0, Math.PI*2); ctx.fill(); } } } if (skin.id === 'skin_chrome') { ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(85, -18); ctx.lineTo(60, -10); ctx.fill(); } }
+function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock') { const isPreview = ctx.canvas.classList.contains('preview-canvas'); const silencerId = silencerIdOverride || GAME.currentSilencer; let shouldDraw = false; if (isPreview) { shouldDraw = !!silencerIdOverride; } else { shouldDraw = GUN.attachments.silencer; } if (isPreview && !silencerIdOverride) shouldDraw = true; let silOffset = 0; let scopeOffset = 0; let laserX = 18; let laserY = 12; if (weaponType === 'beretta') { silOffset = 15; } if (weaponType === 'canik') { silOffset = 10; } if (weaponType === 'fn57') { silOffset = 15; } if (weaponType === 'magnum') { silOffset = 80; scopeOffset = 65; laserX = 60; laserY = 8; } if (shouldDraw && silencerId) { if (silencerId === 'silencer_gold') { ctx.fillStyle = '#ffd700'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#B8860B'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); } else { ctx.fillStyle = '#222'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#444'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); } } const showAccessories = isPreview || GUN.attachments.scope; if(showAccessories && GUN.attachments.scope) { const rX = sX + 15 + scopeOffset; ctx.fillStyle = '#111'; ctx.fillRect(rX, -18, 20, 4); ctx.beginPath(); ctx.moveTo(rX, -18); ctx.lineTo(rX, -28); ctx.lineTo(rX+20, -28); ctx.lineTo(rX+20, -18); ctx.fill(); ctx.fillStyle = 'rgba(0,255,255,0.2)'; ctx.fillRect(rX+2, -26, 16, 8); ctx.fillStyle = 'red'; ctx.fillRect(rX+9, -23, 2, 2); } const showLaser = isPreview || GUN.attachments.laser; if(showLaser && GUN.attachments.laser) { ctx.fillStyle = '#111'; ctx.fillRect(laserX, laserY, 25, 8); ctx.fillStyle = '#eab308'; ctx.fillRect(laserX + 22, laserY + 2, 2, 4); } }
+function resize() { const resString = SETTINGS.resolution || '1920x1080'; const [wStr, hStr] = resString.split('x'); const targetW = parseInt(wStr); const targetH = parseInt(hStr); const targetAspect = targetW / targetH; const windowW = window.innerWidth; const windowH = window.innerHeight; let cssW, cssH; if (windowW / windowH > targetAspect) { cssH = windowH; cssW = cssH * targetAspect; } else { cssW = windowW; cssH = cssW / targetAspect; } gameContainer.style.width = `${cssW}px`; gameContainer.style.height = `${cssH}px`; width = canvas.width = targetW; height = canvas.height = targetH; GUN.y = height / 2; GUN.x = width * 0.2; containerRect = gameContainer.getBoundingClientRect(); if(GAME.state === 'playing') startLevel(GAME.level); }
+function renderPreviews() { const previews = document.querySelectorAll('.preview-canvas'); previews.forEach(canvas => { const ctx = canvas.getContext('2d'); const w = canvas.width; const h = canvas.height; ctx.clearRect(0, 0, w, h); const skinId = canvas.getAttribute('data-skin'); const weaponId = canvas.getAttribute('data-weapon'); ctx.save(); const cx = w / 2; const cy = h / 2; ctx.translate(cx, cy); ctx.scale(1.2, 1.2); if (skinId) { const skin = SKINS[skinId]; if (skin.type === 'silencer') { drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId); } else { drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null); } } else if (weaponId) { if(weaponId === 'glock') drawDetailedGlock(ctx, 0, 0, 0, 0); else if(weaponId === 'beretta') drawDetailedBeretta(ctx, 0, 0, 0, 0); else if(weaponId === 'canik') drawDetailedCanik(ctx, 0, 0, 0, 0); else if(weaponId === 'magnum') drawDetailedMagnum(ctx, 0, 0, 0, 0); else if(weaponId === 'fn57') drawDetailedFN57(ctx, 0, 0, 0, 0); } ctx.restore(); }); }
+function renderRankInfo() { ui.rankListContainer.innerHTML = ''; const currentRankIdx = getRankData().index; RANK_SYSTEM.forEach((rank, idx) => { const div = document.createElement('div'); const unlocked = idx <= currentRankIdx; div.className = `rank-item ${unlocked ? 'unlocked' : ''}`; div.innerHTML = ` <svg style="width:40px; height:40px; fill:${unlocked ? rank.color : '#555'};" viewBox="0 0 24 24"><path d="${rank.icon}"/></svg> <div style="flex:1;"> <div style="color:${unlocked ? '#fff' : '#777'}; font-weight:bold;">${rank.name}</div> <div style="color:#666; font-size:0.8rem;">LEVEL ${rank.min} - ${rank.max}</div> </div> ${rank.reward > 0 ? `<div style="color:#eab308; font-size:0.8rem; font-weight:bold;">+${rank.reward} $</div>` : ''} `; ui.rankListContainer.appendChild(div); }); }
+function renderProfile() { document.getElementById('prof-score').innerText = GAME.stats.totalScore.toLocaleString(); document.getElementById('prof-cash').innerText = GAME.stats.totalScore.toLocaleString() + " $ (Lifetime)"; document.getElementById('prof-rank').innerText = getFullRankName(); document.getElementById('prof-rank').style.color = getRankData().color; document.getElementById('prof-level').innerText = GAME.level; const list = document.getElementById('weapon-usage-list'); list.innerHTML = ''; Object.keys(GAME.weaponUsage).forEach(key => { if(GAME.weaponUsage[key] > 1000) { const row = document.createElement('div'); row.className = 'stat-row'; const name = WEAPONS[key] ? WEAPONS[key].name : key; const seconds = Math.floor(GAME.weaponUsage[key] / 1000); const mins = Math.floor(seconds / 60); row.innerHTML = `<span style="color:#aaa;">${name}</span><span style="color:#fff;">${mins}m</span>`; list.appendChild(row); } }); const mList = document.getElementById('medal-list'); mList.innerHTML = ''; MEDALS.forEach(m => { const unlocked = GAME.unlockedMedals.includes(m.id); const div = document.createElement('div'); div.className = `medal-item ${unlocked ? 'unlocked' : ''}`; div.title = unlocked ? "UNLOCKED" : "LOCKED"; div.innerHTML = ` <div style="font-size:2rem; margin-bottom:5px;">${m.icon}</div> <div style="font-weight:bold; font-size:0.8rem; color:${unlocked?'#fff':'#777'}">${m.name}</div> <div style="font-size:0.6rem; color:#aaa; line-height:1.2;">${m.desc}</div> `; mList.appendChild(div); }); }
+function checkMedals() { MEDALS.forEach(m => { if(!GAME.unlockedMedals.includes(m.id)) { if(m.check(GAME)) { GAME.unlockedMedals.push(m.id); SoundSys.rankup(); ui.notify.innerText = "MEDAL UNLOCKED: " + m.name.toUpperCase(); ui.notify.style.color = "#eab308"; ui.notify.style.opacity = 1; setTimeout(() => { ui.notify.style.opacity = 0; }, 3000); window.saveGame(); } } }); }
 init();
 </script>
 </body>
