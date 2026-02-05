@@ -2,15 +2,57 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SholtBolt: Global Ops</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050505; color: white; font-family: 'Segoe UI', sans-serif; user-select: none; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #gameContainer { position: relative; width: 100%; height: 100%; max-width: 100%; max-height: 100%; background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); overflow: hidden; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
-        #gameCanvas { display: block; cursor: crosshair; width: 100%; height: 100%; }
+        /* TEMEL AYARLAR & MOBİL OPTİMİZASYONU */
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #050505; 
+            color: white; 
+            font-family: 'Segoe UI', sans-serif; 
+            user-select: none; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh;
+            touch-action: none; 
+        }
+
+        #gameContainer { 
+            position: relative; 
+            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); 
+            overflow: hidden; 
+            box-shadow: 0 0 50px rgba(0,0,0,0.5); 
+        }
+
+        #gameCanvas { 
+            display: block; 
+            cursor: crosshair; 
+            width: 100%; 
+            height: 100%; 
+        }
         
-        /* CS2 LOBBY / MAP SELECT SCREEN */
+        /* RESPONSIVE FONT & MENU AYARLARI */
+        @media (max-width: 768px) {
+            .lobby-header { font-size: 2.5rem !important; }
+            .lobby-sub { font-size: 0.9rem !important; }
+            .map-card { min-width: 220px !important; height: 300px !important; }
+            .menu-sidebar { width: 220px !important; }
+            .menu-logo { font-size: 2rem !important; }
+            .rank-widget-name { font-size: 1.2rem !important; }
+            .btn-start { padding: 15px 40px !important; font-size: 1.5rem !important; }
+            .top-panel { padding: 10px !important; gap: 8px !important; }
+            .upgrade-btn { padding: 5px 10px !important; font-size: 0.7rem !important; }
+            .stats-panel { top: 10px !important; right: 10px !important; transform: scale(0.8); transform-origin: top right; }
+            .ui-panel { bottom: 10px !important; left: 10px !important; transform: scale(0.8); transform-origin: bottom left; }
+            .rank-panel { top: 10px !important; left: 10px !important; transform: scale(0.8); transform-origin: top left; min-width: 200px !important; }
+            .hit-counter-box { top: 70px !important; transform: translateX(-50%) scale(0.8) !important; }
+        }
+
+        /* LOBBY / MAP SELECT SCREEN */
         #lobbyScreen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
@@ -28,6 +70,7 @@
         .map-grid {
             display: flex; gap: 20px; overflow-x: auto; padding-bottom: 20px;
             height: 100%; align-items: center;
+            -webkit-overflow-scrolling: touch; 
         }
 
         .map-card {
@@ -38,14 +81,13 @@
             position: relative; overflow: hidden;
             cursor: pointer; transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             display: flex; flex-direction: column; justify-content: flex-end;
+            flex-shrink: 0;
         }
         
         .map-card:hover { transform: scale(1.05) translateY(-10px); border-color: #eab308; box-shadow: 0 20px 40px rgba(0,0,0,0.5); z-index: 10; }
         .map-card::before { content:''; position:absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.9) 100%); z-index: 1; }
-        
         .map-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.6; transition: 0.3s; }
         .map-card:hover .map-img { opacity: 0.8; transform: scale(1.1); }
-        
         .map-info { position: relative; z-index: 2; padding: 20px; }
         .map-title { font-size: 1.8rem; font-weight: 900; text-transform: uppercase; line-height: 1; margin-bottom: 5px; color: #fff; }
         .map-desc { font-size: 0.8rem; color: #94a3b8; line-height: 1.4; }
@@ -57,7 +99,7 @@
         .locked-card { filter: grayscale(1); opacity: 0.5; pointer-events: none; }
         .locked-card .map-tag { background: #333; color: #666; }
 
-        /* CS2 STYLE MENU OVERLAY */
+        /* MENU OVERLAY */
         #mainMenu {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at 60% 50%, rgba(20, 20, 25, 0.4), rgba(5, 5, 8, 0.95));
@@ -71,7 +113,6 @@
             z-index: 42;
             overflow-y: auto; padding-right: 10px;
         }
-        
         .menu-sidebar::-webkit-scrollbar { width: 4px; }
         .menu-sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 
@@ -94,7 +135,6 @@
         .menu-card p { margin: 5px 0 0 0; font-size: 0.8rem; color: #888; }
         .menu-card.highlight { border-left-color: #3b82f6; }
         .menu-card.highlight:hover { border-left-color: #60a5fa; }
-        
         .promo-card:hover { border-left-color: #a855f7; }
 
         .upgrade-stat-box {
@@ -102,7 +142,6 @@
             display: flex; justify-content: space-between; align-items: center;
         }
 
-        /* NEW MENU RANK WIDGET */
         .menu-rank-widget {
             position: absolute; top: 50%; right: 40px; transform: translateY(-50%);
             background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.1);
@@ -135,6 +174,7 @@
             width: 400px; padding: 40px; background: rgba(30, 41, 59, 0.9); border: 1px solid #444;
             border-radius: 8px; backdrop-filter: blur(10px); box-shadow: 0 0 50px rgba(0,0,0,0.8);
             display: flex; flex-direction: column; gap: 15px;
+            max-width: 90%;
         }
         .auth-header { font-size: 2rem; font-weight: 900; color: #fff; text-align: center; margin-bottom: 10px; letter-spacing: 1px; }
         .auth-input {
@@ -191,7 +231,7 @@
         .ammo-sub { font-size: 1.5rem; color: #aaa; font-weight: 600; margin-left: 5px; }
         .gun-label { font-size: 0.9rem; color: #fff; letter-spacing: 3px; margin-top: 5px; text-transform: uppercase; opacity: 0.8; font-weight: 600; }
 
-        .notification { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; font-weight: 900; color: #fff; text-shadow: 0 0 30px rgba(234, 179, 8, 0.8); opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 60; text-align: center; letter-spacing: 2px; }
+        .notification { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; font-weight: 900; color: #fff; text-shadow: 0 0 30px rgba(234, 179, 8, 0.8); opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 60; text-align: center; letter-spacing: 2px; width: 100%; }
         .no-money { color: #ef4444 !important; animation: shake 0.4s; }
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25%, 75% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
 
@@ -216,6 +256,8 @@
         .tut-icon { font-size: 2rem; display: flex; justify-content: center; }
 
         .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; height: 100%; overflow: hidden; }
+        @media(max-width: 768px) { .profile-grid { grid-template-columns: 1fr; overflow-y: scroll; } }
+
         .profile-section { display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 10px; }
         .stat-row { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px 15px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.05); }
         .medal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 15px; }
@@ -238,23 +280,41 @@
         .promo-btn { background: linear-gradient(135deg, #7c3aed, #4c1d95); color: white; border: none; padding: 15px 40px; font-size: 1.2rem; font-weight: bold; cursor: pointer; border-radius: 4px; letter-spacing: 1px; transition: 0.3s; }
         .promo-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(124, 58, 237, 0.6); }
 
-        /* LEADERBOARD TABLE CSS */
         .lb-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         .lb-table th { text-align: left; padding: 10px; color: #9ca3af; font-size: 0.9rem; border-bottom: 1px solid #333; }
         .lb-table td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .lb-rank { font-weight: bold; color: #eab308; width: 50px; }
         .lb-name { font-weight: bold; color: #fff; }
         .lb-score { font-weight: bold; color: #22c55e; text-align: right; }
-        .lb-row:nth-child(1) .lb-rank { color: #ffd700; font-size: 1.2rem; } /* Gold */
-        .lb-row:nth-child(2) .lb-rank { color: #c0c0c0; font-size: 1.1rem; } /* Silver */
-        .lb-row:nth-child(3) .lb-rank { color: #cd7f32; font-size: 1.1rem; } /* Bronze */
+        .lb-row:nth-child(1) .lb-rank { color: #ffd700; font-size: 1.2rem; }
+        .lb-row:nth-child(2) .lb-rank { color: #c0c0c0; font-size: 1.1rem; }
+        .lb-row:nth-child(3) .lb-rank { color: #cd7f32; font-size: 1.1rem; }
+
+        .hit-counter-box {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+            z-index: 25;
+            backdrop-filter: blur(5px);
+        }
+        .hit-icon { font-size: 1.2rem; filter: drop-shadow(0 0 5px rgba(234, 179, 8, 0.5)); }
+        #hitCountDisplay { font-size: 1.5rem; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+
     </style>
 </head>
 <body>
 
     <div id="gameContainer">
         
-        <!-- AUTH SCREEN (Initial) -->
         <div id="authModal">
             <div class="auth-header">SHOLTBOLT</div>
             <div style="color:#94a3b8; font-size:1rem; margin-bottom:20px; letter-spacing:1px;">OPERATOR LOGIN</div>
@@ -269,13 +329,11 @@
             </div>
         </div>
 
-        <!-- NEW LOBBY SCREEN (After Auth) -->
         <div id="lobbyScreen" style="display:none;">
             <div class="lobby-header" data-lang="lobby_header">SHOLTBOLT</div>
             <div class="lobby-sub" data-lang="lobby_sub">SELECT OPERATION</div>
             
             <div class="map-grid">
-                <!-- Mode 1: REFLEX -->
                 <div class="map-card" onclick="window.selectMode('reflex')">
                     <div style="position:absolute; width:100%; height:100%; background:#1e293b; z-index:0; overflow:hidden;">
                         <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -292,7 +350,6 @@
                     </div>
                 </div>
 
-                <!-- Mode 2: HOSTAGE -->
                 <div class="map-card" onclick="window.selectMode('hostage')">
                     <div style="position:absolute; width:100%; height:100%; background:#0f172a; z-index:0; overflow:hidden;">
                          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -311,7 +368,6 @@
                     </div>
                 </div>
 
-                <!-- Mode 3: CLASSIC -->
                 <div class="map-card" onclick="window.selectMode('classic')">
                     <div style="position:absolute; width:100%; height:100%; background:#3a2510; z-index:0; overflow:hidden;">
                         <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -327,12 +383,10 @@
                     </div>
                 </div>
 
-                <!-- Mode 4: DEFENSE (NEW) -->
                 <div class="map-card" onclick="window.selectMode('defense')">
                     <div style="position:absolute; width:100%; height:100%; background:#450a0a; z-index:0; overflow:hidden;">
                          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
                             <path d="M0,0 L100,100 M100,0 L0,100" stroke="#7f1d1d" stroke-width="2"/>
-                            <!-- Arrows pointing left -->
                             <path d="M80,20 L60,30 L80,40" fill="none" stroke="#ef4444" stroke-width="3"/>
                             <path d="M70,50 L50,60 L70,70" fill="none" stroke="#ef4444" stroke-width="3"/>
                             <path d="M80,80 L60,90 L80,100" fill="none" stroke="#ef4444" stroke-width="3"/>
@@ -345,7 +399,6 @@
                     </div>
                 </div>
 
-                <!-- Mode 5: COMPETITIVE (Placeholder) -->
                 <div class="map-card locked-card">
                      <div style="position:absolute; width:100%; height:100%; background:#0f172a; z-index:0;"></div>
                     <div class="map-tag" data-lang="tag_locked">LOCKED</div>
@@ -357,7 +410,6 @@
             </div>
         </div>
 
-        <!-- MAIN MENU INTERFACE (Now Secondary) -->
         <div id="mainMenu">
             <button class="btn-back" onclick="window.backToLobby()" data-lang="back_to_lobby">← SELECT OPERATION</button>
             <div class="menu-sidebar">
@@ -387,7 +439,6 @@
                     <div style="margin-top:10px; background:#ef4444; text-align:center; padding:5px; border-radius:3px; font-weight:bold; font-size:0.8rem;" data-lang="required_cost">1000 $ REQUIRED</div>
                 </div>
 
-                <!-- ADDED: LEADERBOARD BUTTON -->
                 <div class="menu-card" onclick="window.toggleLeaderboard()">
                     <h3 style="color:#facc15" data-lang="leaderboard_title">LEADERBOARD</h3>
                     <p data-lang="leaderboard_desc">Top Operators</p>
@@ -403,17 +454,15 @@
                     <p data-lang="settings_desc">Graphics & Language & Res</p>
                 </div>
 
-                <!-- NEW PROMO CODE BUTTON -->
                 <div class="menu-card promo-card" onclick="window.togglePromo()">
                     <h3 style="color:#a855f7" data-lang="promo">PROMO CODE</h3>
                     <p data-lang="promo_desc">Enter Gift Code</p>
                 </div>
             </div>
 
-            <!-- NEW RANK SYSTEM WIDGET (RIGHT SIDE) -->
             <div class="menu-rank-widget" onclick="window.toggleRankInfo()">
                 <div class="rank-widget-title" data-lang="rank_system">RANK SYSTEM</div>
-                <svg id="menuRankIcon" class="rank-widget-icon" viewBox="0 0 24 24"></svg>
+                <svg id="menuRankIcon" class="rank-widget-icon" viewBox="0 0 40 40"></svg>
                 <div id="menuRankName" class="rank-widget-name">TRAINEE</div>
                 <div class="rank-widget-desc" data-lang="click_details">CLICK FOR DETAILS</div>
             </div>
@@ -427,7 +476,6 @@
             </div>
         </div>
 
-        <!-- Exit Confirmation Modal (NEW) -->
         <div id="exitModal" class="modal-overlay">
             <div class="modal-content" style="max-width: 400px; height: auto; text-align: center; border-color: #ef4444; background: rgba(10, 10, 15, 0.98);">
                 <div class="modal-header" style="justify-content: center; border-color: #ef4444;">
@@ -441,7 +489,6 @@
             </div>
         </div>
 
-        <!-- Tutorial Modal -->
         <div id="tutorialOverlay" class="modal-overlay">
             <div class="modal-content" style="border-color: #3b82f6; max-width: 600px; height: auto;">
                 <div class="modal-header" style="border-color: #3b82f6;">
@@ -449,7 +496,7 @@
                 </div>
                 <div class="tutorial-grid">
                     <div class="tut-icon">🖱️</div>
-                    <div class="tut-text" data-lang="tut_mouse">Use <span style="color:#eab308">MOUSE</span> to aim. <span style="color:#eab308">CLICK</span> to fire.</div>
+                    <div class="tut-text" data-lang="tut_mouse">Use <span style="color:#eab308">MOUSE/TOUCH</span> to aim. <span style="color:#eab308">CLICK/TAP</span> to fire.</div>
                     <div class="tut-icon">🔄</div>
                     <div class="tut-text" data-lang="tut_reload">Press <span style="color:#eab308">'R'</span> to reload.</div>
                     <div class="tut-icon">⚠️</div>
@@ -459,7 +506,6 @@
             </div>
         </div>
 
-        <!-- Store Modal (Skins) -->
         <div id="storeModal" class="modal-overlay">
             <div class="modal-content">
                 <div class="modal-header"><div class="modal-title" data-lang="skins_title">WEAPON SKINS</div><div class="close-btn" onclick="window.toggleStore()" data-lang="close">CLOSE</div></div>
@@ -467,7 +513,6 @@
             </div>
         </div>
 
-        <!-- Weapon Selection Modal -->
         <div id="weaponModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #3b82f6;">
                 <div class="modal-header"><div class="modal-title" style="color:#3b82f6;" data-lang="inventory">INVENTORY</div><div class="close-btn" onclick="window.toggleWeaponStore()" data-lang="close">CLOSE</div></div>
@@ -475,7 +520,6 @@
             </div>
         </div>
 
-        <!-- Profile Modal -->
         <div id="profileModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #8b5cf6;">
                 <div class="modal-header">
@@ -500,7 +544,6 @@
             </div>
         </div>
 
-        <!-- NEW: LEADERBOARD MODAL -->
         <div id="leaderboardModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #facc15; max-width:600px;">
                 <div class="modal-header" style="border-color: #facc15;">
@@ -517,7 +560,6 @@
                             </tr>
                         </thead>
                         <tbody id="leaderboardList">
-                            <!-- JS Populates this -->
                             <tr><td colspan="3" style="text-align:center; color:#666;" data-lang="lb_loading">LOADING DATA...</td></tr>
                         </tbody>
                     </table>
@@ -525,7 +567,6 @@
             </div>
         </div>
 
-        <!-- SETTINGS MODAL -->
         <div id="settingsModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #94a3b8; max-width: 600px; height: auto;">
                 <div class="modal-header">
@@ -543,6 +584,7 @@
                     <div class="setting-row">
                         <label data-lang="resolution_label">RESOLUTION</label>
                         <select id="resSelect" onchange="window.changeResolution(this.value)">
+                            <option value="auto">AUTO (DEVICE)</option>
                             <option value="1920x1080">1920x1080 (FHD)</option>
                             <option value="1280x720">1280x720 (HD)</option>
                             <option value="960x540">960x540 (Performance)</option>
@@ -560,7 +602,6 @@
             </div>
         </div>
 
-        <!-- PROMO CODE MODAL (NEW) -->
         <div id="promoModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #a855f7; max-width: 500px; height: auto;">
                 <div class="modal-header" style="border-color: #a855f7;">
@@ -576,23 +617,22 @@
             </div>
         </div>
 
-        <!-- Rank Info Modal -->
         <div id="rankInfoModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #9ca3af;" id="rankModalContent">
                 <div class="modal-header"><div class="modal-title" style="color: #fff;" data-lang="rank_system">RANK SYSTEM</div><div class="close-btn" onclick="window.toggleRankInfo()" data-lang="close">CLOSE</div></div>
                 <div id="rankListContainer" class="rank-list-container"></div>
             </div>
         </div>
-
-        <!-- IN-GAME HUD ELEMENTS (Has class hud-element) -->
         
-        <!-- NEW HOSTAGE PANEL -->
-        <div id="hostagePanel" class="hostage-panel hud-element" style="display:none;">
-            <!-- Icons injected via JS -->
+        <div id="hitCounterPanel" class="hud-element hit-counter-box">
+            <div class="hit-icon">🎯</div>
+            <div id="hitCountDisplay">0</div>
         </div>
 
+        <div id="hostagePanel" class="hostage-panel hud-element" style="display:none;"></div>
+
         <div id="rankPanel" class="rank-panel hud-element" onclick="window.toggleRankInfo()" title="Rütbe Detayları">
-            <svg id="currentRankIcon" class="rank-icon" viewBox="0 0 24 24"></svg>
+            <svg id="currentRankIcon" class="rank-icon" viewBox="0 0 40 40"></svg>
             <div class="rank-info">
                 <div id="rankTitle" class="rank-title">TRAINEE</div>
                 <div id="rankSub" class="rank-sub">UNRANKED</div>
@@ -645,16 +685,11 @@
     </div>
 
 <script type="module">
-// Import Firebase SDKs (Using 11.6.1 for best compatibility in this env)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
-// ... existing firebase config code ...
-// FIREBASE CONFIGURATION STRATEGY
-// 1. Priority: Use Environment Config (Fixes 'admin-restricted' error in Preview)
-// 2. Fallback: Use User Provided Config (For local use/export)
 let firebaseConfig;
 if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
@@ -670,18 +705,14 @@ if (typeof __firebase_config !== 'undefined') {
     };
 }
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Analytics can fail in strict iframe environments, so we wrap it
 let analytics;
 try { analytics = getAnalytics(app); } catch(e) { console.log("Analytics not supported in this env"); }
 
-// App ID logic
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// AUTH INITIALIZATION (Fixes Permissions)
 const initAuth = async () => {
     try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -696,19 +727,14 @@ const initAuth = async () => {
 };
 initAuth();
 
-// CLOUD SAVE LOGIC
 let currentUserDoc = null;
 let isGuest = true;
 
-// --- LEADERBOARD & SCORE FUNCTIONS ---
-
-// 1. UPDATE LEADERBOARD UI (Helper Function)
 window.refreshLeaderboardUI = async () => {
     const list = document.getElementById('leaderboardList');
     const t = TRANSLATIONS[SETTINGS.language];
     list.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#aaa; padding:20px;">${t.lb_loading || 'LOADING...'}</td></tr>`;
     
-    // Call getTop10Scores as requested
     const top10 = await window.getTop10Scores();
     
     list.innerHTML = '';
@@ -733,24 +759,18 @@ window.refreshLeaderboardUI = async () => {
     }
 }
 
-// 2. ADD SCORE (High Score Logic)
 window.addScore = async (username, score) => {
     if(!username || isGuest) return; 
     try {
         if (!auth.currentUser) await initAuth();
-        
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'highscores', username);
-        
-        // Check existing score first (Don't overwrite high score with lower score)
         const docSnap = await getDoc(docRef);
         let shouldUpdate = true;
         
         if (docSnap.exists()) {
             const currentData = docSnap.data();
-            // Only update if new score is higher
             if (currentData.score >= score) {
                 shouldUpdate = false;
-                console.log("Score not high enough to update.");
             }
         }
         
@@ -759,11 +779,6 @@ window.addScore = async (username, score) => {
                 score: Number(score),
                 timestamp: new Date().toISOString()
             });
-            console.log("New High Score Saved!");
-            
-            // Requirement: Call getTop10Scores (via UI refresh) after adding
-            // Only refresh if the modal is actually open to save bandwidth, 
-            // but we call the logic as requested.
             if(document.getElementById('leaderboardModal').style.display === 'flex') {
                 window.refreshLeaderboardUI();
             }
@@ -773,7 +788,6 @@ window.addScore = async (username, score) => {
     }
 }
 
-// 3. GET TOP 10 SCORES
 window.getTop10Scores = async () => {
     try {
         if (!auth.currentUser) await initAuth();
@@ -786,14 +800,11 @@ window.getTop10Scores = async () => {
     } catch (e) { return []; }
 }
 
-// UI HANDLER FOR LEADERBOARD
 window.toggleLeaderboard = async function() {
     const modal = document.getElementById('leaderboardModal');
-    
     if (modal.style.display === 'flex') {
         modal.style.display = 'none';
     } else {
-        // Close others
         if(GAME.isStoreOpen) window.toggleStore();
         if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
         if(GAME.isProfileOpen) window.toggleProfile();
@@ -801,12 +812,10 @@ window.toggleLeaderboard = async function() {
         if(GAME.isPromoOpen) window.togglePromo();
         
         modal.style.display = 'flex';
-        // Trigger fetch
         window.refreshLeaderboardUI();
     }
 }
 
-// GLOBAL WINDOW FUNCTIONS FOR AUTH
 window.handleRegister = async () => {
     const user = document.getElementById('authUsername').value.trim().toLowerCase();
     const pass = document.getElementById('authPassword').value;
@@ -819,10 +828,7 @@ window.handleRegister = async () => {
     status.innerText = "CONNECTING...";
     
     try {
-        // Ensure we are authenticated before querying
         if (!auth.currentUser) await initAuth(); 
-        
-        // Use strict path for public data
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', user);
         const docSnap = await getDoc(docRef);
         
@@ -830,9 +836,8 @@ window.handleRegister = async () => {
             status.style.color = "#ef4444";
             status.innerText = "USERNAME TAKEN";
         } else {
-            // Create new account
             await setDoc(docRef, {
-                password: btoa(pass), // Basic encoding
+                password: btoa(pass), 
                 saveData: defaultGame,
                 createdAt: new Date().toISOString()
             });
@@ -865,18 +870,14 @@ window.handleLogin = async () => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             if(data.password === btoa(pass)) {
-                // SUCCESS
                 currentUserDoc = user;
                 isGuest = false;
-                
-                // LOAD DATA
                 if(data.saveData) {
                     GAME = { ...defaultGame, ...data.saveData };
-                    // Ensure essential arrays
+                    // Safe guard for old saves
                     if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
-                    // Settings load
                     SETTINGS.language = GAME.settings.lang || 'en';
-                    SETTINGS.resolution = GAME.settings.res || '1920x1080';
+                    SETTINGS.resolution = GAME.settings.res || 'auto'; 
                     SETTINGS.graphics = GAME.settings.gfx || 'high';
                 }
                 
@@ -902,10 +903,12 @@ window.handleLogin = async () => {
 window.handleGuest = () => {
     isGuest = true;
     currentUserDoc = null;
-    // Load local storage if exists
     try { 
         let saved = JSON.parse(localStorage.getItem('glock_classic_save'));
-        if(saved) GAME = { ...defaultGame, ...saved };
+        if(saved) {
+             GAME = { ...defaultGame, ...saved };
+             if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
+        }
     } catch(e) {}
     
     document.getElementById('authModal').style.display = 'none';
@@ -919,19 +922,15 @@ function updateCloudStatus(text, color) {
     document.getElementById('cloudIndicator').style.background = color;
 }
 
-// Global Save Function (Overrides the local one)
 window.saveGame = async function() {
-    // 1. Save to Local Storage (Backup)
     GAME.settings = { lang: SETTINGS.language, res: SETTINGS.resolution, gfx: SETTINGS.graphics };
     const dataToSave = { ...GAME, state: 'lobby', isPaused: false, isPromoOpen: false };
     try { localStorage.setItem('glock_classic_save', JSON.stringify(dataToSave)); } catch(e) {}
     
-    // 2. Save to Cloud if Logged In
     if(!isGuest && currentUserDoc) {
         try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'accounts', currentUserDoc);
             await setDoc(docRef, { saveData: dataToSave }, { merge: true });
-            
             const ind = document.getElementById('cloudIndicator');
             ind.style.boxShadow = "0 0 10px #22c55e";
             setTimeout(() => ind.style.boxShadow = "none", 500);
@@ -943,7 +942,6 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const gameContainer = document.getElementById('gameContainer');
 
-// UI Refs
 const ui = {
     lobbyScreen: document.getElementById('lobbyScreen'),
     mainMenu: document.getElementById('mainMenu'),
@@ -952,6 +950,7 @@ const ui = {
     menuBalance: document.getElementById('menuBalance'),
     hudElements: document.querySelectorAll('.hud-element'),
     hostagePanel: document.getElementById('hostagePanel'), 
+    hitCountDisplay: document.getElementById('hitCountDisplay'), 
     ammoCount: document.getElementById('ammoCount'), ammoBar: document.getElementById('ammoBar'),
     levelText: document.getElementById('levelText'), scoreDisplay: document.getElementById('scoreDisplay'),
     coinDisplay: document.getElementById('coinDisplay'), notify: document.getElementById('levelNotify'),
@@ -969,9 +968,7 @@ const ui = {
     settingsModal: document.getElementById('settingsModal'),
     resSelect: document.getElementById('resSelect'), gfxSelect: document.getElementById('gfxSelect'), langSelect: document.getElementById('langSelect'),
     promoModal: document.getElementById('promoModal'), promoInput: document.getElementById('promoInput'), promoResult: document.getElementById('promoResult'),
-    leaderboardModal: document.getElementById('leaderboardModal'), // Added Ref
-    
-    // NEW MENU RANK WIDGET REFS
+    leaderboardModal: document.getElementById('leaderboardModal'),
     menuRankWidget: document.querySelector('.menu-rank-widget'),
     menuRankIcon: document.getElementById('menuRankIcon'),
     menuRankName: document.getElementById('menuRankName')
@@ -979,22 +976,12 @@ const ui = {
 
 let width, height;
 const GRAVITY = 0.6;
-let menuRotation = 0; // for showcase
-
-// Fix for ReferenceError: mouse is not defined
+let menuRotation = 0; 
 let mouse = { x: 0, y: 0 };
-// Fix for ReferenceError: UPGRADE is not defined
 const UPGRADE = { active: false, phase: 0, timer: 0, boxY: -100, boxScale: 1, glow: 0, particles: [] };
 
+const SETTINGS = { language: 'en', resolution: 'auto', graphics: 'high' };
 
-// SETTINGS & TRANSLATIONS
-const SETTINGS = {
-    language: 'en', // Changed Default to EN
-    resolution: '1920x1080', 
-    graphics: 'high' 
-};
-
-// ... TRANSLATIONS ...
 const TRANSLATIONS = {
     tr: {
         lobby_header: "SHOLTBOLT", lobby_sub: "OPERASYON SEÇİMİ",
@@ -1005,7 +992,6 @@ const TRANSLATIONS = {
         mode_defense_title: "SAVUNMA HATTI", mode_defense_desc: "Kutular saldırıyor! Sana temas etmeden hepsini yok et.",
         mode_range_title: "POLİGON", mode_range_desc: "Haraketli hedefler. Keskin nişancı eğitimi için ideal. (Yakında)",
         mode_comp_title: "REKABETÇİ", mode_comp_desc: "Sıralamalı maçlar. 5v5 Simülasyonu. (Yakında)",
-        // ... existing translations ...
         tut_reflex: "Kırmızı hedefler aniden belirir. Süre bitmeden vur!",
         tut_hostage: "REHİNEYİ KURTARMAK İÇİN HEPSİNİ VUR!",
         tut_classic: "Blokları yok et, para kazan ve silahını güçlendir.",
@@ -1015,7 +1001,9 @@ const TRANSLATIONS = {
         msg_wave: "DALGA",
         leaderboard_title: "LİDERLİK TABLOSU", leaderboard_desc: "En İyi Operatörler", lb_operator: "OPERATÖR", lb_loading: "VERİLER YÜKLENİYOR...", lb_no_scores: "HENÜZ SKOR YOK",
         buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ",
-        msg_score_saved: "SKOR KAYDEDİLDİ"
+        msg_score_saved: "SKOR KAYDEDİLDİ",
+        resolution_label: "ÇÖZÜNÜRLÜK", tut_mouse: "Nişan almak için <span style='color:#eab308'>DOKUN</span> veya <span style='color:#eab308'>FARE</span> kullan.",
+        rank_private: "ER", rank_trigger: "TETİKÇİ", rank_chief: "OPERASYON ŞEFİ", rank_general: "GENERAL"
     },
     en: {
         lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION",
@@ -1026,7 +1014,6 @@ const TRANSLATIONS = {
         mode_defense_title: "DEFENSE LINE", mode_defense_desc: "Enemies are rushing! Don't let them touch you.",
         mode_range_title: "SHOOTING RANGE", mode_range_desc: "Moving targets. Sniper training. (Coming Soon)",
         mode_comp_title: "COMPETITIVE", mode_comp_desc: "Ranked matches. 5v5 Simulation. (Coming Soon)",
-        // ... existing translations ...
         tut_reflex: "Red targets appear suddenly. Hit them before time runs out!",
         tut_hostage: "SHOOT THEM ALL TO SAVE THE HOSTAGE!",
         tut_classic: "Destroy blocks, earn cash, and upgrade weapon.",
@@ -1036,20 +1023,21 @@ const TRANSLATIONS = {
         msg_wave: "WAVE",
         leaderboard_title: "LEADERBOARD", leaderboard_desc: "Top Operators", lb_operator: "OPERATOR", lb_loading: "LOADING DATA...", lb_no_scores: "NO SCORES YET",
         buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT",
-        msg_score_saved: "SCORE SAVED"
+        msg_score_saved: "SCORE SAVED",
+        resolution_label: "RESOLUTION", tut_mouse: "Use <span style='color:#eab308'>TOUCH</span> or <span style='color:#eab308'>MOUSE</span> to aim.",
+        rank_private: "PRIVATE", rank_trigger: "TRIGGER", rank_chief: "OPS CHIEF", rank_general: "GENERAL"
     }
 };
 
-// WEAPONS CONFIG
 const WEAPONS = {
     'glock': { name: 'Glock 19 Gen 5', capacity: 15, damage: 1.0, reloadTime: 1200, price: 0, desc: "Standard Issue. Reliable." },
     'beretta': { name: 'Beretta 92FS', capacity: 15, damage: 1.15, reloadTime: 1400, price: 2500, desc: "Legendary 9mm. High Accuracy." },
     'canik': { name: 'Canik TP9 SF', capacity: 18, damage: 1.05, reloadTime: 1100, price: 5600, desc: "Turkish Perfection." },
     'magnum': { name: 'Desert Eagle', capacity: 8, damage: 2.5, reloadTime: 1800, price: 9500, desc: "Hand Cannon. Pure Power." },
-    'fn57': { name: 'FN Five-seveN', capacity: 20, damage: 1.1, reloadTime: 1100, price: 11000, desc: "20 Rounds. Armor Piercing." }
+    'fn57': { name: 'FN Five-seveN', capacity: 20, damage: 1.1, reloadTime: 1100, price: 11000, desc: "20 Rounds. Armor Piercing." },
+    'mpt55': { name: 'MPT-55', capacity: 30, damage: 1.4, reloadTime: 2200, price: 18000, desc: "National Infantry Rifle. 5.56mm." }
 };
 
-// MEDALS CONFIG
 const MEDALS = [
     { id: 'recruit', name: 'Recruit', desc: 'Destroy your first target.', icon: '🎯', check: (g) => g.stats.totalBlocks > 0 },
     { id: 'rich', name: 'Rich', desc: 'Amass 10,000 $.', icon: '💰', check: (g) => g.coins >= 10000 },
@@ -1060,20 +1048,58 @@ const MEDALS = [
     { id: 'terminator', name: 'Terminator', desc: 'Destroy 1000 Targets.', icon: '💀', check: (g) => g.stats.totalBlocks >= 1000 }
 ];
 
-const RANK_SYSTEM = [
-    { name: "TRAINEE", min: 1, max: 10, color: "#9ca3af", reward: 0, icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" },
-    { name: "BRONZE", min: 11, max: 25, color: "#cd7f32", reward: 500, icon: "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" },
-    { name: "SILVER", min: 26, max: 50, color: "#c0c0c0", reward: 1000, icon: "M12 2l-5.5 9h11z" },
-    { name: "GOLD", min: 51, max: 80, color: "#ffd700", reward: 2000, icon: "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" },
-    { name: "PLATINUM", min: 81, max: 120, color: "#22d3ee", reward: 5000, icon: "M12 2L2 7l10 5 10-5-10-5zm0 9l2-1-2-1-2 1 2 1zm0-3l2-1-2-1-2 1 2 1z M2 17l10 5 10-5M2 12l10 5 10-5" },
-    { name: "DIAMOND", min: 121, max: 180, color: "#a855f7", reward: 10000, icon: "M12 2l-9 4v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V6l-9-4z M12 4l2 3h-4l2-3z" },
-    { name: "ELITE MASTER", min: 181, max: 300, color: "#ef4444", reward: 25000, icon: "M12 2c-4.42 0-8 3.58-8 8 0 4.42 3.58 8 8 8s8-3.58 8-8c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" },
-    { name: "GLOBAL LEGEND", min: 301, max: 9999, color: "#f472b6", reward: 50000, icon: "M12 1L9 8h6zM12 23l3-7H9zM3 12l7 3V9zM3 12l7 3V9zM3 12l7 3V9zM21 12l-7-3v6z" }
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
+
+// DYNAMIC RANK SYSTEM GENERATION
+const RANK_CATEGORIES = [
+    { id: 'private', baseName: "rank_private", color: "#06b6d4", startLvl: 1, endLvl: 9, reward: 0 },
+    { id: 'trigger', baseName: "rank_trigger", color: "#eab308", startLvl: 10, endLvl: 18, reward: 2000 },
+    { id: 'chief',   baseName: "rank_chief",   color: "#f59e0b", startLvl: 19, endLvl: 27, reward: 5000 },
+    { id: 'general', baseName: "rank_general", color: "#ef4444", startLvl: 28, endLvl: 9999, reward: 10000 }
 ];
 
-const SUB_RANKS = ["I", "II", "III", "IV"];
+const RANK_SYSTEM = [];
+RANK_CATEGORIES.forEach((cat, idx) => {
+    // For Private, Trigger, Chief (fixed 9 sub-ranks)
+    if(cat.id !== 'general') {
+        for(let i=0; i<9; i++) {
+             RANK_SYSTEM.push({
+                 id: cat.id,
+                 tier: i,
+                 min: cat.startLvl + i,
+                 max: cat.startLvl + i, 
+                 color: cat.color,
+                 baseNameKey: cat.baseName,
+                 reward: (i===0 && idx>0) ? cat.reward : (i>0 ? 500 : 0) // Reward on new tier or sub-rank
+             });
+        }
+    } else {
+        // General scales infinitely
+        // We define the first 9 levels explicitly for the list
+        for(let i=0; i<9; i++) {
+            RANK_SYSTEM.push({
+                 id: cat.id,
+                 tier: i,
+                 min: cat.startLvl + i,
+                 max: cat.startLvl + i, // 1 level per rank for fast progression example
+                 color: cat.color,
+                 baseNameKey: cat.baseName,
+                 reward: (i===0) ? cat.reward : 1000
+             });
+        }
+        // Add a "Max General" entry
+        RANK_SYSTEM.push({
+             id: cat.id,
+             tier: 9,
+             min: cat.startLvl + 9,
+             max: 9999,
+             color: cat.color,
+             baseNameKey: cat.baseName,
+             reward: 1000
+        });
+    }
+});
 
-// SKINS CONFIG
 const SKINS = {
     'skin_black': { id: 'skin_black', name: 'Factory New', price: 0, type: 'gun', color: '#1a1a1a', slideColor: '#2d2d2d' },
     'skin_silver': { id: 'skin_silver', name: 'Platinum Plated', price: 2000, type: 'gun', color: '#1a1a1a', slideColor: '#e0e0e0' },
@@ -1082,37 +1108,31 @@ const SKINS = {
     'skin_turkish': { id: 'skin_turkish', name: 'Crimson Flag', price: 5000, type: 'gun', color: '#e30a17', slideColor: '#e30a17' },
     'skin_usa': { id: 'skin_usa', name: 'Stars & Stripes', price: 6000, type: 'gun', color: '#3c3b6e', slideColor: '#b22234' },
     'skin_chrome': { id: 'skin_chrome', name: 'Chromium', price: 7000, type: 'gun', color: '#1a1a1a', slideColor: '#e8e8e8' },
+    'skin_camo': { id: 'skin_camo', name: 'Digital Camo', price: 3500, type: 'gun', color: '#3f4e38', slideColor: '#2c3327' },
     'silencer_default': { id: 'silencer_default', name: 'Standard Suppressor', price: 0, type: 'silencer', color: '#222' },
     'silencer_gold': { id: 'silencer_gold', name: 'Golden Suppressor', price: 6300, type: 'silencer', color: '#ffd700' }
 };
 
-// Game State (Auto Save)
 const defaultGame = {
     level: 1, maxLevel: 9999, state: 'lobby', mode: 'classic', score: 0, coins: 150, 
     wallHP: 0, isStoreOpen: false, isWeaponStoreOpen: false, isRankInfoOpen: false, isProfileOpen: false, isSettingsOpen: false, reloadCost: 50,
-    isPromoOpen: false, // New State
+    isPromoOpen: false,
     ownedSkins: ['skin_black', 'silencer_default'], 
     ownedWeapons: ['glock'],
     currentWeapon: 'glock',
     currentSkin: 'skin_black', currentSilencer: 'silencer_default',
     timer: 0, maxTime: 0, lastTime: 0, weaponLevel: 1, hitStreak: 0,
     stats: { totalScore: 0, totalBlocks: 0 },
-    hostagesSaved: 0, totalHostages: 6, // NEW STATE
+    hostagesSaved: 0, totalHostages: 6,
+    targetsHit: 0,
     weaponUsage: {},
     unlockedMedals: [],
-    redeemedCodes: [], // New state for codes
-    // MOD LEVELS (NEW: Separate progress for each mode)
-    modeLevels: {
-        classic: 1,
-        reflex: 1,
-        hostage: 1,
-        defense: 1
-    },
+    redeemedCodes: [],
+    modeLevels: { classic: 1, reflex: 1, hostage: 1, defense: 1 },
     isPaused: false,
-    settings: { lang: 'en', res: '1920x1080', gfx: 'high' } // Default Persistent Settings: EN
+    settings: { lang: 'en', res: 'auto', gfx: 'high' }
 };
 
-// INITIALIZE GAME VAR AS DEFAULT (Data loaded after auth)
 let GAME = JSON.parse(JSON.stringify(defaultGame));
 
 const GUN = {
@@ -1124,35 +1144,29 @@ if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capac
 GUN.ammo = GUN.maxAmmo;
 
 let bullets = [], particles = [], shells = [], magazines = [], wallBlocks = [], reflexTargets = [];
-let defenseEnemies = []; // NEW ARRAY FOR DEFENSE MODE
+let defenseEnemies = [];
 let containerRect = null;
 let currentFullRankName = "";
 let flashTimer=0, flashPos={x:0, y:0};
-let reflexSpawnTimer = 0; // For new mode
-let defenseSpawnTimer = 0; // NEW TIMER
+let reflexSpawnTimer = 0;
+let defenseSpawnTimer = 0;
 
 const HITMAN_ANIM = { active: false, timer: 0, alpha: 0 };
 const RANK_UP_ANIM = { active: false, timer: 0, text: "", subText: "", rewardText: "" };
 
 window.selectMode = function(modeName) {
     GAME.mode = modeName;
-    
-    // NEW: Load the specific level for this mode
     GAME.level = GAME.modeLevels[modeName] || 1;
-    
     ui.lobbyScreen.style.display = 'none';
     ui.mainMenu.style.display = 'flex';
     let t = TRANSLATIONS[SETTINGS.language];
     let modeTitle = t.mode_classic_title;
     if(modeName === 'reflex') modeTitle = t.mode_reflex_title;
     if(modeName === 'hostage') modeTitle = t.mode_hostage_title;
-    if(modeName === 'defense') modeTitle = t.mode_defense_title; // Add Title
+    if(modeName === 'defense') modeTitle = t.mode_defense_title;
     ui.selectedModeDisplay.innerText = "MODE: " + modeTitle;
     GAME.state = 'menu';
-    
-    // Ranks UI update based on new loaded level
     updateRankUI();
-    
     updateMenuStats(); 
     SoundSys.buy();
 }
@@ -1171,10 +1185,8 @@ window.startGameFromMenu = function() {
     ui.tutorialOverlay.style.display = 'flex';
     const t = TRANSLATIONS[SETTINGS.language];
 
-    // Hide hostage panel by default
     ui.hostagePanel.style.display = 'none';
 
-    // Customize tutorial text based on mode
     if(GAME.mode === 'reflex') {
         ui.tutObjective.innerText = t.tut_reflex;
         ui.tutObjective.style.color = "#ef4444";
@@ -1185,7 +1197,6 @@ window.startGameFromMenu = function() {
         ui.tutObjective.innerText = t.tut_hostage;
         ui.tutObjective.style.color = "#facc15";
     } else if (GAME.mode === 'defense') {
-        // DEFENSE TUTORIAL TEXT
         ui.tutObjective.innerText = t.tut_defense;
         ui.tutObjective.style.color = "#ef4444";
     } else {
@@ -1202,13 +1213,7 @@ function renderHostageUI() {
         const isSaved = i < GAME.hostagesSaved;
         const div = document.createElement('div');
         div.className = `hostage-icon ${isSaved ? 'saved' : ''}`;
-        // SVG: Simple Person Icon
-        div.innerHTML = `
-            <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M12 14c-6.1 0-8 4-8 4v2h16v-2s-1.9-4-8-4z" />
-            </svg>
-        `;
+        div.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M12 14c-6.1 0-8 4-8 4v2h16v-2s-1.9-4-8-4z"/></svg>`;
         ui.hostagePanel.appendChild(div);
     }
 }
@@ -1221,64 +1226,102 @@ window.closeTutorial = function() {
     SoundSys.resume();
 }
 
-// === EXIT MODAL FUNCTIONS ===
 window.openExitModal = function() {
     GAME.isPaused = true;
     ui.exitModal.style.display = 'flex';
-    SoundSys.blip(); // Audio feedback
+    SoundSys.blip();
 }
 
 window.closeExitModal = function() {
     GAME.isPaused = false;
     ui.exitModal.style.display = 'none';
-    GAME.lastTime = Date.now(); // Reset timer delta to prevent big jump
+    GAME.lastTime = Date.now();
 }
 
 window.confirmExit = function() {
     closeExitModal();
     const t = TRANSLATIONS[SETTINGS.language];
-    
-    // SKOR KAYIT MEKANİZMASI
-    // Maçtan her çıkışta mevcut toplam skoru liderlik tablosuna gönderir
     if (!isGuest && currentUserDoc) {
         window.addScore(currentUserDoc, GAME.stats.totalScore);
-        
-        // Görsel Geri Bildirim
         ui.notify.innerText = t.msg_score_saved;
         ui.notify.style.color = "#22c55e";
         ui.notify.style.opacity = 1;
         setTimeout(() => { ui.notify.style.opacity = 0; }, 2000);
     }
-
-    // Return to Main Menu (Loadout Screen)
     GAME.state = 'menu';
     ui.hudElements.forEach(el => el.style.display = 'none');
     ui.mainMenu.style.display = 'flex';
-    
-    // Clean up game objects
-    bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = [];
-    
+    bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = []; defenseEnemies = [];
     updateMenuStats(); 
-    window.saveGame(); // İlerlemeyi (para, level vb.) buluta ve yerele kaydet
+    window.saveGame();
     SoundSys.buy();
 }
 
-// Audio System
 const actx = new (window.AudioContext || window.webkitAudioContext)();
+const noiseBuffer = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+const output = noiseBuffer.getChannelData(0);
+for (let i = 0; i < actx.sampleRate * 2; i++) {
+    output[i] = Math.random() * 2 - 1;
+}
+
 const SoundSys = {
     resume: () => { if(actx.state === 'suspended') actx.resume(); },
     shoot: (silenced) => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        const isMagnum = GAME.currentWeapon === 'magnum';
-        const isFN57 = GAME.currentWeapon === 'fn57';
-        let baseFreq = silenced ? 150 : 220; let endFreq = 40; let vol = silenced ? 0.3 : 0.8; let decay = 0.15;
-        if(isMagnum) { baseFreq = 100; endFreq = 20; vol = 1.0; decay = 0.3; osc.type = 'square'; } 
-        else if (isFN57) { baseFreq = 280; endFreq = 60; vol = 0.7; decay = 0.1; osc.type = silenced ? 'sine' : 'sawtooth'; } 
-        else { osc.type = silenced ? 'sine' : 'triangle'; }
-        osc.frequency.setValueAtTime(baseFreq, t); osc.frequency.exponentialRampToValueAtTime(endFreq, t+decay);
-        g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.01, t+decay);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+decay);
+        SoundSys.resume();
+        const t = actx.currentTime;
+        const wType = GAME.currentWeapon;
+        
+        // Ayarlar
+        let punchFreq = 150;
+        let punchType = 'triangle';
+        let punchDecay = 0.2;
+        let noiseDecay = 0.3;
+        let noiseFilter = 2000;
+        let vol = 1.0;
+
+        if (wType === 'magnum') {
+            punchFreq = 100; punchDecay = 0.6; noiseDecay = 0.7; noiseFilter = 1500; punchType='square'; vol=1.2;
+        } else if (wType === 'mpt55') {
+            punchFreq = 200; punchDecay = 0.4; noiseDecay = 0.4; noiseFilter = 3000; punchType='sawtooth'; vol=1.0;
+        } else if (wType === 'fn57') {
+            punchFreq = 300; punchDecay = 0.15; noiseDecay = 0.2; noiseFilter = 4000; vol=0.8;
+        }
+
+        if (silenced) {
+            noiseFilter = 800; noiseDecay = 0.1; punchDecay = 0.1; vol *= 0.4; punchType='sine';
+        }
+
+        // 1. Tokluk (Punch) Katmanı
+        const osc = actx.createOscillator();
+        const oscGain = actx.createGain();
+        osc.type = punchType;
+        osc.frequency.setValueAtTime(punchFreq, t);
+        osc.frequency.exponentialRampToValueAtTime(10, t + punchDecay);
+        oscGain.gain.setValueAtTime(vol * 0.5, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + punchDecay);
+        osc.connect(oscGain);
+        oscGain.connect(actx.destination);
+        osc.start(t);
+        osc.stop(t + punchDecay);
+
+        // 2. Patlama (Blast) Katmanı (Noise)
+        const noiseSrc = actx.createBufferSource();
+        noiseSrc.buffer = noiseBuffer;
+        const noiseFilterNode = actx.createBiquadFilter();
+        const noiseGain = actx.createGain();
+        
+        noiseFilterNode.type = silenced ? 'lowpass' : 'bandpass';
+        noiseFilterNode.frequency.setValueAtTime(noiseFilter, t);
+        if(!silenced) noiseFilterNode.frequency.linearRampToValueAtTime(100, t + noiseDecay);
+
+        noiseGain.gain.setValueAtTime(vol, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + noiseDecay);
+
+        noiseSrc.connect(noiseFilterNode);
+        noiseFilterNode.connect(noiseGain);
+        noiseGain.connect(actx.destination);
+        noiseSrc.start(t);
+        noiseSrc.stop(t + noiseDecay);
     },
     buy: () => {
         SoundSys.resume(); const t = actx.currentTime;
@@ -1309,9 +1352,9 @@ const SoundSys = {
 };
 
 function init() {
-    // Show Auth Modal First, don't just loop
     resize();
     window.addEventListener('resize', resize);
+    
     window.addEventListener('mousemove', e => { 
         if (!containerRect) return; 
         const scaleX = canvas.width / containerRect.width;
@@ -1326,6 +1369,24 @@ function init() {
             menuRotation = (dx / width) * 0.5; 
         }
     });
+
+    const handleTouch = (e) => {
+        if (!containerRect) return;
+        const touch = e.touches[0];
+        const scaleX = canvas.width / containerRect.width;
+        const scaleY = canvas.height / containerRect.height;
+        mouse.x = (touch.clientX - containerRect.left) * scaleX;
+        mouse.y = (touch.clientY - containerRect.top) * scaleY;
+    };
+
+    window.addEventListener('touchmove', handleTouch, { passive: false });
+    window.addEventListener('touchstart', (e) => {
+        handleTouch(e);
+        handleClick(e);
+    }, { passive: false });
+    
+    gameContainer.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+
     window.addEventListener('mousedown', handleClick);
     window.addEventListener('keydown', e => { 
         SoundSys.resume(); 
@@ -1333,14 +1394,8 @@ function init() {
         
         if (e.key === 'Escape') {
             if (GAME.state === 'playing') {
-                if (GAME.isPaused) {
-                    window.closeExitModal();
-                } else {
-                    window.openExitModal();
-                }
+                if (GAME.isPaused) { window.closeExitModal(); } else { window.openExitModal(); }
             } else if (GAME.state === 'menu' && !ui.storeModal.style.display.includes('flex') && !GAME.isSettingsOpen && !GAME.isPromoOpen && !ui.leaderboardModal.style.display.includes('flex')) {
-                // Optional: Back to lobby from menu if ESC pressed
-                // backToLobby();
             } else if (GAME.isStoreOpen) { window.toggleStore(); }
             else if (GAME.isWeaponStoreOpen) { window.toggleWeaponStore(); }
             else if (GAME.isProfileOpen) { window.toggleProfile(); }
@@ -1351,17 +1406,14 @@ function init() {
         }
     });
     
-    // NOTE: Game is started via auth buttons now, loop is called there
     requestAnimationFrame(loop);
 }
 
 function initGameUI() {
-    // Set UI values from loaded settings
     ui.langSelect.value = SETTINGS.language;
     ui.resSelect.value = SETTINGS.resolution;
     ui.gfxSelect.value = SETTINGS.graphics;
     
-    // Ensure Gun Data matches loaded save
     if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity;
     GUN.ammo = GUN.maxAmmo;
     
@@ -1370,8 +1422,6 @@ function initGameUI() {
     updateRankUI();
     currentFullRankName = getFullRankName();
     updateMenuStats();
-    
-    // Trigger loop if not running? Loop is running but state handles drawing
 }
 
 function updateMenuStats() {
@@ -1410,46 +1460,141 @@ function getRankData() {
         const r = RANK_SYSTEM[i];
         if(GAME.level >= r.min && GAME.level <= r.max) return { ...r, index: i };
     }
+    // Fallback to max rank
     return { ...RANK_SYSTEM[RANK_SYSTEM.length-1], index: RANK_SYSTEM.length-1 };
 }
 
-function getTierIndex(rankData) { 
-    const totalLevelsInRank = rankData.max - rankData.min + 1;
-    const currentLevelInRank = GAME.level - rankData.min;
-    const levelsPerTier = totalLevelsInRank / 4;
-    return Math.floor(currentLevelInRank / levelsPerTier); 
+function getFullRankName() {
+    const rank = getRankData();
+    const t = TRANSLATIONS[SETTINGS.language];
+    const baseName = t[rank.baseNameKey] || rank.baseNameKey;
+    
+    // For general (index 27+), keep increasing roman numeral visual logic elsewhere, but here just say General
+    if(rank.id === 'general' && rank.tier >= 9) return baseName + " (MAX)";
+
+    const roman = ROMAN[rank.tier] || "";
+    return roman ? `${baseName} ${roman}` : baseName;
 }
 
-function getFullRankName() {
-    const rank = getRankData(); 
-    if(rank.index >= RANK_SYSTEM.length - 1) return rank.name;
-    const tierIdx = Math.min(3, getTierIndex(rank));
-    return `${rank.name} ${SUB_RANKS[tierIdx]}`;
+// Function to generate dynamic SVG for ranks based on Tier
+function getRankSVG(rank) {
+    let svgContent = "";
+    const tier = rank.tier; // 0 to 8 (I to IX)
+    
+    if (rank.id === 'private') {
+        // Private: Sun rays / Chevrons
+        // Base line
+        const hasBottomBar = tier >= 3; // IV+
+        const hasMultiBar = tier >= 6;  // VII+
+        
+        // Rays
+        let rays = 2 + (tier % 3); // 2, 3, 4 rays cycling
+        
+        // Draw Rays
+        const cx = 20; const cy = 30;
+        for(let i=0; i<rays; i++) {
+            const spread = 40;
+            const angle = -90 - (spread/2) + (spread/(rays-1)) * i;
+            const rad = angle * (Math.PI / 180);
+            const x2 = cx + Math.cos(rad) * 20;
+            const y2 = cy + Math.sin(rad) * 20;
+            svgContent += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#facc15" stroke-width="4" stroke-linecap="round" />`;
+        }
+
+        // Bottom Bars
+        if (hasBottomBar) {
+            svgContent += `<rect x="5" y="32" width="30" height="3" fill="#06b6d4" />`;
+        }
+        if (hasMultiBar) {
+             svgContent += `<rect x="5" y="36" width="30" height="3" fill="#06b6d4" />`;
+             svgContent += `<rect x="5" y="28" width="30" height="3" fill="#06b6d4" />`;
+        }
+
+    } else if (rank.id === 'trigger') {
+        // Trigger: Yellow Bar with Vertical stripes
+        svgContent += `<rect x="2" y="10" width="36" height="20" fill="#facc15" />`;
+        const stripes = tier + 1; // 1 to 9 stripes
+        const startX = 5;
+        const gap = 3;
+        const w = 2;
+        
+        for(let i=0; i<stripes; i++) {
+             svgContent += `<rect x="${startX + i*(w+gap)}" y="10" width="${w}" height="20" fill="#111" />`;
+        }
+        
+    } else if (rank.id === 'chief') {
+        // Ops Chief: Yellow Bar with Stars
+        svgContent += `<rect x="2" y="10" width="36" height="20" fill="#facc15" />`;
+        // Stars logic from image:
+        // I-III: 1-3 stars
+        // IV-V: 4-5 stars
+        // VI: Special Star (Wreath)
+        // VII+: Special Star + Normal Stars
+        
+        const count = tier + 1;
+        
+        if (count <= 5) {
+             // Just stars
+             for(let i=0; i<count; i++) {
+                 svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${8 + i*6}, 20) scale(1.2)" fill="black" />`;
+             }
+        } else {
+             // Special Star at start
+             svgContent += `<circle cx="8" cy="20" r="5" stroke="black" stroke-width="1" fill="none" />`; // Simple wreath rep
+             svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(8, 20) scale(1.5)" fill="black" />`;
+             
+             // Additional stars
+             const extra = count - 5; // VI -> 1 extra, etc. Wait image shows VI is just special star.
+             // VI (index 5) -> Special
+             // VII (index 6) -> Special + 1
+             const normalStars = Math.max(0, count - 6); 
+             
+             for(let i=0; i<normalStars; i++) {
+                 svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="black" />`;
+             }
+        }
+
+    } else if (rank.id === 'general') {
+        // General: Red Bar with Yellow Stars/Laurels
+        svgContent += `<rect x="2" y="10" width="36" height="20" fill="#ef4444" />`;
+        // Logic:
+        // I: Special Wreath Star + 4 stars? Or just complex.
+        // Let's simplified progression:
+        // Wreath Star always present. + Stars based on tier.
+        
+        // Draw Wreath Star
+        svgContent += `<circle cx="8" cy="20" r="6" stroke="#facc15" stroke-width="1.5" fill="none" />`;
+        svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(8, 20) scale(1.5)" fill="#facc15" />`;
+        
+        const stars = tier; 
+        for(let i=0; i<stars; i++) {
+             svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="#111" />`;
+        }
+    }
+    
+    return svgContent;
 }
+
 
 function updateRankUI() {
     const currentRank = getRankData();
-    const isMax = currentRank.index >= RANK_SYSTEM.length - 1;
-    const tierIdx = isMax ? 0 : Math.min(3, getTierIndex(currentRank));
-    const subRank = isMax ? "MAX" : SUB_RANKS[tierIdx];
+    const isMax = currentRank.id === 'general' && currentRank.tier >= 9;
     
-    // In-Game Panel Updates
-    ui.rankTitle.innerText = currentRank.name;
+    ui.rankTitle.innerText = getFullRankName();
     ui.rankTitle.style.color = currentRank.color;
     ui.rankTitle.style.textShadow = `0 0 15px ${currentRank.color}`;
-    ui.rankSub.innerText = isMax ? "MAX RANK" : `TIER ${subRank}`;
+    
+    ui.rankSub.innerText = isMax ? "MAX RANK" : `TIER ${currentRank.tier + 1}`;
     ui.rankSub.style.color = currentRank.color;
-    ui.currentRankIcon.innerHTML = `<path d="${currentRank.icon}"/>`;
-    ui.currentRankIcon.style.fill = currentRank.color;
-    ui.currentRankIcon.style.filter = `drop-shadow(0 0 8px ${currentRank.color})`;
+    
+    const svgContent = getRankSVG(currentRank);
+    ui.currentRankIcon.innerHTML = svgContent;
     ui.rankPanel.style.borderLeftColor = currentRank.color;
 
-    // NEW: Menu Widget Updates
     if(ui.menuRankWidget) {
         ui.menuRankWidget.style.borderRightColor = currentRank.color;
-        ui.menuRankIcon.innerHTML = `<path d="${currentRank.icon}"/>`;
-        ui.menuRankIcon.style.fill = currentRank.color;
-        ui.menuRankName.innerText = currentRank.name;
+        ui.menuRankIcon.innerHTML = svgContent;
+        ui.menuRankName.innerText = getFullRankName();
         ui.menuRankName.style.color = currentRank.color;
     }
 
@@ -1471,9 +1616,16 @@ function updateRankUI() {
 function triggerRankUpAnim(newRankName, rewardAmount) {
     const t = TRANSLATIONS[SETTINGS.language];
     RANK_UP_ANIM.active = true; RANK_UP_ANIM.timer = 200; 
-    RANK_UP_ANIM.text = t.msg_rankup; RANK_UP_ANIM.subText = newRankName; 
-    RANK_UP_ANIM.rewardText = `+${rewardAmount} $ ${t.msg_reward}`;
+    RANK_UP_ANIM.text = t.msg_rankup || "RANK UP!"; RANK_UP_ANIM.subText = newRankName; 
+    RANK_UP_ANIM.rewardText = `+${rewardAmount} $ ${t.msg_reward || 'REWARD'}`;
     SoundSys.rankup();
+}
+
+function updateHitCounterUI() {
+    const count = GAME.targetsHit || 0;
+    if(ui.hitCountDisplay) {
+        ui.hitCountDisplay.innerText = count;
+    }
 }
 
 function startLevel(lvl) {
@@ -1491,7 +1643,9 @@ function startLevel(lvl) {
     updateRankUI(); 
     window.saveGame();
     wallBlocks = []; bullets = []; reflexTargets = []; defenseEnemies = [];
-    
+    GAME.targetsHit = 0;
+    updateHitCounterUI();
+
     if(GAME.mode === 'classic') {
         const maxRows = Math.min(25, 4 + Math.floor(lvl / 2));
         const maxCols = Math.min(8, 2 + Math.floor(lvl / 10));
@@ -1511,17 +1665,14 @@ function startLevel(lvl) {
         GAME.maxTime = Math.ceil(wallBlocks.length * timePerBlock) + 5; 
     } else if (GAME.mode === 'reflex') {
         GAME.targetsToHit = 10 + Math.floor(lvl * 1.5);
-        GAME.targetsHit = 0;
         GAME.maxTime = 30 + (lvl * 2); 
         reflexSpawnTimer = 0;
     } else if (GAME.mode === 'hostage') {
         GAME.targetsToHit = 5 + lvl + Math.floor(lvl/2); 
-        GAME.targetsHit = 0;
         GAME.maxTime = 25; 
         reflexSpawnTimer = 0;
     } else if (GAME.mode === 'defense') {
         GAME.targetsToHit = 10 + Math.floor(lvl * 2); 
-        GAME.targetsHit = 0;
         GAME.maxTime = 60 + (lvl * 5); 
         defenseSpawnTimer = 0;
     }
@@ -1535,12 +1686,7 @@ function gameOver(reason) {
     const t = TRANSLATIONS[SETTINGS.language];
     GAME.state = 'gameover';
     
-    // AUTO SAVE SCORE ON GAME OVER (IF NOT GUEST)
-    // Requirement: Call addScore when player finishes game
     if (!isGuest && currentUserDoc) {
-        // We use GAME.stats.totalScore as the leaderboard metric (lifetime score)
-        // Or GAME.score (current run score)? Usually leaderboards are best run or total accumulated.
-        // Based on "Global Ops" style, let's use Total Lifetime Score for rank/prestige
         window.addScore(currentUserDoc, GAME.stats.totalScore);
     }
 
@@ -1631,7 +1777,6 @@ window.toggleProfile = function() {
     }
 }
 
-// NEW SETTINGS FUNCTIONS
 window.toggleSettings = function() {
     GAME.isSettingsOpen = !GAME.isSettingsOpen;
     ui.settingsModal.style.display = GAME.isSettingsOpen ? 'flex' : 'none';
@@ -1645,7 +1790,6 @@ window.toggleSettings = function() {
     }
 }
 
-// NEW PROMO FUNCTIONS
 window.togglePromo = function() {
     GAME.isPromoOpen = !GAME.isPromoOpen;
     ui.promoModal.style.display = GAME.isPromoOpen ? 'flex' : 'none';
@@ -1685,7 +1829,6 @@ window.submitPromoCode = function() {
             ui.promoResult.style.color = "#22c55e";
             SoundSys.rankup();
             
-            // Auto close after success
             setTimeout(() => { if(GAME.isPromoOpen) window.togglePromo(); }, 1500);
         }
     } else {
@@ -1739,7 +1882,6 @@ function renderStore() {
         const card = document.createElement('div');
         card.className = `item-card ${isActive ? 'active' : ''}`;
         
-        // Button Logic Construction
         let btnHTML = '';
         if (isOwned) {
             if (isActive) {
@@ -1802,20 +1944,18 @@ function renderWeaponStore() {
     });
 }
 
-// GLOBAL WINDOW FUNCTIONS FOR BUY/EQUIP (Ensures accessibility from HTML onclick)
 window.buySkin = (id) => {
     const s = SKINS[id];
     if(GAME.coins >= s.price) {
         GAME.coins -= s.price; 
         GAME.ownedSkins.push(id); 
         
-        // Auto Equip logic based on type
         if(s.type === 'silencer') GAME.currentSilencer = id; 
         else GAME.currentSkin = id;
         
         updateUI(); 
-        updateMenuStats(); // EKLENDİ: Menüdeki parayı anlık güncelle
-        renderStore(); // Re-render to update buttons
+        updateMenuStats();
+        renderStore();
         window.saveGame(); 
         SoundSys.buy(); 
         requestAnimationFrame(renderPreviews);
@@ -1848,7 +1988,7 @@ window.buyWeapon = (key) => {
         GUN.ammo = w.capacity; 
         
         updateUI(); 
-        updateMenuStats(); // EKLENDİ: Menüdeki parayı anlık güncelle
+        updateMenuStats();
         renderWeaponStore(); 
         window.saveGame(); 
         SoundSys.buy(); 
@@ -1899,12 +2039,14 @@ function drawUpgradeEffect() {
         if(SETTINGS.graphics !== 'low') {
             UPGRADE.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.02; if(p.life>0) { ctx.globalAlpha = p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, 5, 5); } }); ctx.globalAlpha = 1; 
         }
-        const floatY = cy - Math.min(UPGRADE.timer * 2, 50); const scale = Math.min(UPGRADE.timer * 0.1, 2); ctx.save(); ctx.translate(cx, floatY); ctx.scale(scale, scale); ctx.shadowColor = '#eab308'; ctx.shadowBlur = 20; ctx.strokeStyle = '#eab308'; ctx.lineWidth = 3; ctx.beginPath(); for(let i=0; i<10; i++) { ctx.moveTo(-15, -20 + i*5); ctx.lineTo(15, -18 + i*5); ctx.lineTo(-15, -15 + i*5); } ctx.stroke(); ctx.fillStyle = '#fff'; ctx.fillRect(-2, -25, 4, 55); ctx.restore(); ctx.shadowBlur = 0; ctx.save(); ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = "bold 40px Segoe UI"; ctx.fillText(t.msg_upgraded, cx, cy + 80); ctx.font = "20px Segoe UI"; ctx.fillStyle = "#eab308"; ctx.fillText(t.msg_dmg_added, cx, cy + 110); ctx.restore(); }
+        const floatY = cy - Math.min(UPGRADE.timer * 2, 50); const scale = Math.min(UPGRADE.timer * 0.1, 2); ctx.save(); ctx.translate(cx, floatY); ctx.scale(scale, scale); ctx.shadowColor = '#eab308'; ctx.shadowBlur = 20; ctx.strokeStyle = '#eab308'; ctx.lineWidth = 3; ctx.beginPath(); for(let i=0; i<10; i++) { ctx.moveTo(-15, -20 + i*5); ctx.lineTo(15, -18 + i*5); ctx.lineTo(-15, -15 + i*5); } ctx.stroke(); ctx.fillStyle = '#fff'; ctx.fillRect(-2, -25, 4, 55); ctx.restore(); ctx.shadowBlur = 0; ctx.save(); ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = "bold 40px Segoe UI"; ctx.fillText(t.msg_upgraded || "UPGRADED", cx, cy + 80); ctx.font = "20px Segoe UI"; ctx.fillStyle = "#eab308"; ctx.fillText(t.msg_dmg_added || "DAMAGE +10", cx, cy + 110); ctx.restore(); }
 }
 
-function handleClick() {
-    if(GAME.state === 'menu' || GAME.state === 'lobby') return; // Click handled by UI
+function handleClick(e) {
+    if(GAME.state === 'menu' || GAME.state === 'lobby') return; 
     if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex') return;
+    if(e.target.closest('.hud-element') || e.target.closest('.modal-content')) return;
+
     SoundSys.resume(); if(GUN.reloading) return; if(GUN.ammo <= 0) { reload(); return; }
     const now = Date.now(); if(now - GUN.lastShot > 110) { shoot(); GUN.lastShot = now; }
 }
@@ -1913,46 +2055,35 @@ function shoot() {
     GUN.ammo--; updateUI(); SoundSys.shoot(GUN.attachments.silencer); const rMod = GUN.attachments.silencer ? 0.8 : 1.0;
     const weaponData = WEAPONS[GAME.currentWeapon]; const dmgMult = weaponData.damage || 1;
     let baseRecoil = 20; let baseAngle = -0.15;
-    if(GAME.currentWeapon === 'beretta') { baseRecoil = 25; baseAngle = -0.18; } if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
+    if(GAME.currentWeapon === 'beretta') { baseRecoil = 25; baseAngle = -0.18; } 
+    if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } 
+    if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } 
+    if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
+    if(GAME.currentWeapon === 'mpt55') { baseRecoil = 28; baseAngle = -0.12; } // Tüfek olduğu için omuz desteği var, açısal tepme daha az ama hissi tok.
     
-    // Recoil affects gun visual, but we separate bullet path now for accuracy
     GUN.recoilX = baseRecoil * rMod; 
     GUN.recoilAngle = baseAngle * rMod; 
-    GUN.slideOffset = (GAME.currentWeapon === 'magnum') ? 40 : 25; 
+    GUN.slideOffset = (GAME.currentWeapon === 'magnum' || GAME.currentWeapon === 'mpt55') ? 40 : 25; 
     
-    const barrelLen = GUN.attachments.silencer ? 95 : 70; 
-    
-    // Visual Angle (Gun muzzle position includes recoil)
+    let barrelLen = GUN.attachments.silencer ? 95 : 70; 
+    if(GAME.currentWeapon === 'mpt55') barrelLen = GUN.attachments.silencer ? 140 : 110; // Tüfek namlusu uzun
+
     const visualAngle = GUN.angle + GUN.recoilAngle * 0.5; 
     const nX = (GUN.x - GUN.recoilX*0.5) + Math.cos(visualAngle) * barrelLen; 
     const nY = GUN.y + Math.sin(visualAngle) * barrelLen; 
-    
-    // Fire Angle (Bullet path is STRICTLY aiming angle, ignoring recoil lift)
-    // This fixes the "shooting high" issue.
     const fireAngle = GUN.angle; 
 
-    // Reduced spread for better accuracy
     let spread = (Math.random()-0.5) * 0.015; 
-    if(GUN.attachments.scope) spread = 0; // Perfect accuracy with scope
+    if(GUN.attachments.scope) spread = 0; 
+    if(GAME.currentWeapon === 'mpt55') spread *= 0.6; // Tüfek daha isabetli
 
     const damage = (45 + (GAME.weaponLevel - 1) * 10) * dmgMult;
-    
-    // NEW LOGIC: Bullet Speed Adjustment
-    let bulletSpeed = 30; // Default
-    // Reflex ve Hostage modlarında mermi çok daha hızlı gitmeli (targets disappear fast)
-    if(GAME.mode === 'reflex' || GAME.mode === 'hostage') {
-        bulletSpeed = 80; // Significant increase to ensure it reaches targets in time
-    }
+    let bulletSpeed = 30; 
+    if(GAME.mode === 'reflex' || GAME.mode === 'hostage') bulletSpeed = 80;
 
     bullets.push({
-        x: nX, 
-        y: nY, 
-        vx: Math.cos(fireAngle + spread) * bulletSpeed, 
-        vy: Math.sin(fireAngle + spread) * bulletSpeed, 
-        prevX: nX, 
-        prevY: nY, 
-        active: true, 
-        power: damage
+        x: nX, y: nY, vx: Math.cos(fireAngle + spread) * bulletSpeed, vy: Math.sin(fireAngle + spread) * bulletSpeed, 
+        prevX: nX, prevY: nY, active: true, power: damage
     }); 
     
     shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); SoundSys.shell(); 
@@ -1962,7 +2093,15 @@ function shoot() {
 function reload() {
     if(GUN.reloading || GUN.ammo === GUN.maxAmmo) return;
     if(GAME.coins < GAME.reloadCost) { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); return; }
-    GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: 15, height: 35 }); SoundSys.reload(); setTimeout(() => { GUN.ammo = GUN.maxAmmo; GUN.reloading = false; updateUI(); }, wData.reloadTime);
+    GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; 
+    
+    // Şarjör görseli ayarı
+    let magW = 15; let magH = 35;
+    if(GAME.currentWeapon === 'mpt55') { magW = 20; magH = 45; } // MPT şarjörü daha büyük
+
+    magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: magW, height: magH }); 
+    SoundSys.reload(); 
+    setTimeout(() => { GUN.ammo = GUN.maxAmmo; GUN.reloading = false; updateUI(); }, wData.reloadTime);
 }
 
 function checkHitmanCombo() { if (GAME.hitStreak > 0 && GAME.hitStreak % 15 === 0) { HITMAN_ANIM.active = true; HITMAN_ANIM.timer = 90; HITMAN_ANIM.alpha = 0; SoundSys.levelup(); } }
@@ -1970,14 +2109,13 @@ function drawHitmanEffect(ctx) {
     const t = TRANSLATIONS[SETTINGS.language];
     if (!HITMAN_ANIM.active) return; HITMAN_ANIM.timer--; if (HITMAN_ANIM.timer <= 0) { HITMAN_ANIM.active = false; return; }
     if (HITMAN_ANIM.timer > 70) HITMAN_ANIM.alpha += 0.05; else if (HITMAN_ANIM.timer < 20) HITMAN_ANIM.alpha -= 0.05; if (HITMAN_ANIM.alpha > 1) HITMAN_ANIM.alpha = 1; if (HITMAN_ANIM.alpha < 0) HITMAN_ANIM.alpha = 0;
-    const cx = width / 2; const cy = height / 2 - 50; ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300); gradient.addColorStop(0, 'rgba(220, 38, 38, 0.4)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); const scale = 1 + Math.sin(Date.now() * 0.01) * 0.05; ctx.translate(cx, cy); ctx.scale(scale * 3, scale * 3); const agentPath = new Path2D("M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10C22 6.48 17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"); ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; ctx.fill(agentPath); ctx.restore(); ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; ctx.textAlign = "center"; ctx.font = "900 60px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 30; ctx.fillText("HITMAN", cx, cy + 120); ctx.font = "bold 20px 'Segoe UI'"; ctx.fillStyle = "#ef4444"; ctx.shadowBlur = 0; ctx.fillText(`15 ${t.msg_hit_streak}`, cx, cy + 150); ctx.restore();
+    const cx = width / 2; const cy = height / 2 - 50; ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300); gradient.addColorStop(0, 'rgba(220, 38, 38, 0.4)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); const scale = 1 + Math.sin(Date.now() * 0.01) * 0.05; ctx.translate(cx, cy); ctx.scale(scale * 3, scale * 3); const agentPath = new Path2D("M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10C22 6.48 17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"); ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; ctx.fill(agentPath); ctx.restore(); ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; ctx.textAlign = "center"; ctx.font = "900 60px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 30; ctx.fillText("HITMAN", cx, cy + 120); ctx.font = "bold 20px 'Segoe UI'"; ctx.fillStyle = "#ef4444"; ctx.shadowBlur = 0; ctx.fillText(`15 ${t.msg_hit_streak || 'STREAK'}`, cx, cy + 150); ctx.restore();
 }
 function drawRankUpEffect(ctx) {
     if (!RANK_UP_ANIM.active) return; RANK_UP_ANIM.timer--; if (RANK_UP_ANIM.timer <= 0) { RANK_UP_ANIM.active = false; return; }
     const cx = width / 2; const cy = height / 2; const alpha = Math.min(1, RANK_UP_ANIM.timer / 50); ctx.save(); ctx.globalAlpha = alpha; const rankData = getRankData(); const color = rankData.color; ctx.fillStyle = "rgba(0, 0, 0, 0.9)"; ctx.fillRect(0, 0, width, height); ctx.textAlign = "center"; ctx.shadowBlur = 30; ctx.shadowColor = color; ctx.font = "900 80px 'Segoe UI'"; ctx.fillStyle = color; ctx.fillText(RANK_UP_ANIM.text, cx, cy - 40); ctx.font = "bold 50px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.fillText(RANK_UP_ANIM.subText, cx, cy + 40); if (RANK_UP_ANIM.rewardText) { ctx.font = "bold 30px 'Segoe UI'"; ctx.fillStyle = "#22c55e"; ctx.shadowColor = "#22c55e"; ctx.shadowBlur = 10; ctx.fillText(RANK_UP_ANIM.rewardText, cx, cy + 90); } for(let i=0; i<8; i++) { ctx.fillStyle = Math.random() > 0.5 ? color : "#fff"; ctx.shadowColor = color; ctx.fillRect(cx + (Math.random()-0.5)*500, cy + (Math.random()-0.5)*400, 5, 5); } ctx.restore();
 }
 
-// Main Loop
 function loop() {
     const t = TRANSLATIONS[SETTINGS.language];
     const now = Date.now();
@@ -1986,9 +2124,7 @@ function loop() {
     
     ctx.clearRect(0,0,width,height);
 
-    // ... menu state checks ...
     if (GAME.state === 'menu' || GAME.state === 'lobby') {
-        // ... existing menu rendering ...
         if (SETTINGS.graphics !== 'low') {
             for(let i=0; i<20; i++) {
                 ctx.fillStyle = `rgba(100, 100, 120, 0.1)`;
@@ -1998,15 +2134,20 @@ function loop() {
             }
         }
         if(GAME.state === 'menu') {
-             // ... existing gun menu draw ...
-             const cx = width / 2 + 100; const cy = height / 2; ctx.save(); ctx.translate(cx, cy); ctx.scale(2.5, 2.5); ctx.rotate(menuRotation); const wType = GAME.currentWeapon; if(wType==='glock') drawDetailedGlock(ctx,0,0,0,0); else if(wType==='beretta') drawDetailedBeretta(ctx,0,0,0,0); else if(wType==='canik') drawDetailedCanik(ctx,0,0,0,0); else if(wType==='magnum') drawDetailedMagnum(ctx,0,0,0,0); else if(wType==='fn57') drawDetailedFN57(ctx,0,0,0,0); ctx.restore();
+             const cx = width / 2 + 100; const cy = height / 2; ctx.save(); ctx.translate(cx, cy); ctx.scale(2.5, 2.5); ctx.rotate(menuRotation); const wType = GAME.currentWeapon; 
+             if(wType==='glock') drawDetailedGlock(ctx,0,0,0,0); 
+             else if(wType==='beretta') drawDetailedBeretta(ctx,0,0,0,0); 
+             else if(wType==='canik') drawDetailedCanik(ctx,0,0,0,0); 
+             else if(wType==='magnum') drawDetailedMagnum(ctx,0,0,0,0); 
+             else if(wType==='fn57') drawDetailedFN57(ctx,0,0,0,0); 
+             else if(wType==='mpt55') drawDetailedMPT55(ctx,0,0,0,0);
+             ctx.restore();
         }
         if(GAME.isStoreOpen || GAME.isWeaponStoreOpen) requestAnimationFrame(renderPreviews);
         requestAnimationFrame(loop);
         return; 
     }
     
-    // ... gameplay bg ...
     if(GAME.state === 'playing') {
         if (SETTINGS.graphics !== 'low') {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
@@ -2018,7 +2159,6 @@ function loop() {
             ctx.stroke();
         }
         
-        // Draw "Safety Line" for Defense Mode
         if(GAME.mode === 'defense') {
             ctx.beginPath();
             ctx.moveTo(GUN.x + 80, 0);
@@ -2046,15 +2186,12 @@ function loop() {
         GUN.angle += (GUN.targetAngle - GUN.angle) * 0.2; 
     }
     GUN.recoilX *= 0.8; GUN.recoilAngle *= 0.8; GUN.slideOffset *= 0.8;
-    // ... laser drawing ...
     if(GUN.attachments.laser) { const bLen = GUN.attachments.silencer ? 95 : 70; const lx = (GUN.x - GUN.recoilX) + Math.cos(GUN.angle+GUN.recoilAngle)*bLen; const ly = GUN.y + Math.sin(GUN.angle+GUN.recoilAngle)*bLen; ctx.beginPath(); ctx.moveTo(lx, ly+10); ctx.lineTo(lx + Math.cos(GUN.angle)*2000, ly+10 + Math.sin(GUN.angle)*2000); ctx.strokeStyle='rgba(234, 179, 8, 0.5)'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#eab308'; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI*2); ctx.fill(); }
 
     let levelCleared = false;
 
-    // === MODE SPECIFIC LOGIC ===
     if(GAME.state === 'playing' && !GAME.isPaused) {
         if(GAME.mode === 'classic') {
-            // ... existing classic logic ...
             let allCleared = true;
             wallBlocks.forEach(b => {
                 if(b.active) {
@@ -2071,7 +2208,6 @@ function loop() {
             levelCleared = allCleared;
         } 
         else if(GAME.mode === 'reflex') {
-            // ... existing reflex logic ...
             reflexSpawnTimer--;
             if(reflexSpawnTimer <= 0) {
                 const size = 60 - Math.min(30, GAME.level * 2);
@@ -2083,6 +2219,10 @@ function loop() {
                 SoundSys.blip();
                 reflexSpawnTimer = 60 - Math.min(40, GAME.level * 3); 
             }
+            
+            // CLEANUP: Remove inactive targets to prevent memory leak
+            reflexTargets = reflexTargets.filter(t => t.active);
+
             reflexTargets.forEach(t => {
                 if(!t.active) return;
                 t.life--;
@@ -2098,9 +2238,8 @@ function loop() {
                 }
             });
             if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
-            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_targets}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
+            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_targets || 'TARGETS'}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
         } else if (GAME.mode === 'hostage') {
-            // ... existing hostage logic ...
             reflexSpawnTimer--;
             if(reflexSpawnTimer <= 0) {
                 const size = 50; const padding = 100; const rx = padding + Math.random() * (width - padding*2); const ry = padding + Math.random() * (height - padding*2); const life = 90; 
@@ -2108,6 +2247,10 @@ function loop() {
                 SoundSys.blip();
                 reflexSpawnTimer = 45 - Math.min(25, GAME.level * 2); 
             }
+
+            // CLEANUP: Remove inactive targets
+            reflexTargets = reflexTargets.filter(t => t.active);
+
             reflexTargets.forEach(t => {
                 if(!t.active) return;
                 t.life--;
@@ -2122,111 +2265,51 @@ function loop() {
                 }
             });
             if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
-            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#facc15"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_rescue}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
+            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#facc15"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_rescue || 'SAVED'}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
         } else if (GAME.mode === 'defense') {
-            // === DEFENSE MODE LOGIC ===
             defenseSpawnTimer--;
-            
-            // DÜZELTME 1: Düşman Sıklığı (Spawn Rate)
-            // Başlangıçta daha seyrek (100 frame), seviye arttıkça sıklaşır (min 30 frame)
             let spawnRate = 100 - Math.min(70, GAME.level * 4); 
             
-            // Limit 20'ye çıkarıldı
             if(defenseSpawnTimer <= 0 && defenseEnemies.length < 20) {
                 const size = 50;
-                
-                // DÜZELTME 2: Hız Dengesi (Speed Balance)
-                // Eskiden 1.5 ile başlıyordu, şimdi 0.8 ile başlıyor (Daha yavaş başlangıç)
-                // Her levelde 0.12 hızlanıyor.
                 const speed = 0.8 + (GAME.level * 0.12) + (Math.random() * 0.5); 
-                
                 const hp = 30 + (GAME.level * 5); 
                 const spawnY = 50 + Math.random() * (height - 100);
-                
-                defenseEnemies.push({
-                    x: width + size, 
-                    y: spawnY,
-                    initialY: spawnY,
-                    size: size,
-                    hp: hp,
-                    maxHp: hp,
-                    speed: speed,
-                    active: true,
-                    jitterPhase: Math.random() * Math.PI * 2,
-                    hitTimer: 0
-                });
+                defenseEnemies.push({ x: width + size, y: spawnY, initialY: spawnY, size: size, hp: hp, maxHp: hp, speed: speed, active: true, jitterPhase: Math.random() * Math.PI * 2, hitTimer: 0 });
                 defenseSpawnTimer = spawnRate;
             }
 
-            // Update and Draw Defense Enemies
             defenseEnemies.forEach(e => {
                 if(!e.active) return;
-                
-                // 1. Move Left
                 e.x -= e.speed;
-                
-                // 2. Jitter Effect
                 const jitterAmt = 3; 
                 e.y = e.initialY + Math.sin(Date.now() * 0.005 + e.jitterPhase) * 20 + Math.sin(Date.now() * 0.05) * jitterAmt;
 
-                // 3. Collision Check with Player Area
                 const safeZoneX = GUN.x + 80;
-                if (e.x < safeZoneX) {
-                    gameOver('breach'); 
-                    return;
-                }
+                if (e.x < safeZoneX) { gameOver('breach'); return; }
 
-                // 4. Draw
                 const hpPct = e.hp / e.maxHp;
                 const hitFlash = e.hitTimer > 0;
                 if(e.hitTimer > 0) e.hitTimer--;
 
-                ctx.save();
-                ctx.translate(e.x, e.y);
-                ctx.rotate(Math.sin(Date.now() * 0.01) * 0.1);
-                
+                ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(Math.sin(Date.now() * 0.01) * 0.1);
                 if(hitFlash) {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
+                    ctx.fillStyle = '#fff'; ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
                 } else {
-                    // Body
-                    ctx.fillStyle = '#7f1d1d'; 
-                    ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
-                    
-                    // Front Face
-                    ctx.fillStyle = `rgba(220, 38, 38, ${0.5 + hpPct * 0.5})`;
-                    ctx.fillRect(-e.size/2 + 4, -e.size/2 + 4, e.size - 8, e.size - 8);
-                    
-                    // "Spikes"
-                    ctx.fillStyle = '#000';
-                    ctx.beginPath();
-                    ctx.moveTo(-10, -5); ctx.lineTo(-20, 0); ctx.lineTo(-10, 5); ctx.fill();
-                    
-                    // Health Bar
-                    ctx.fillStyle = '#333';
-                    ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size, 5);
-                    ctx.fillStyle = '#ef4444';
-                    ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size * hpPct, 5);
+                    ctx.fillStyle = '#7f1d1d'; ctx.fillRect(-e.size/2, -e.size/2, e.size, e.size);
+                    ctx.fillStyle = `rgba(220, 38, 38, ${0.5 + hpPct * 0.5})`; ctx.fillRect(-e.size/2 + 4, -e.size/2 + 4, e.size - 8, e.size - 8);
+                    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.moveTo(-10, -5); ctx.lineTo(-20, 0); ctx.lineTo(-10, 5); ctx.fill();
+                    ctx.fillStyle = '#333'; ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size, 5); ctx.fillStyle = '#ef4444'; ctx.fillRect(-e.size/2, -e.size/2 - 10, e.size * hpPct, 5);
                 }
-
                 ctx.restore();
             });
             
-            // DÜZELTME 3: Ölü düşmanları diziden temizle (Cleaning)
-            // Bu satır olmazsa dizi dolar ve yeni düşman gelmez.
             defenseEnemies = defenseEnemies.filter(e => e.active);
 
-            // Check win condition
             if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
-            
-            // UI
-            ctx.font = "bold 20px Segoe UI";
-            ctx.fillStyle = "#ef4444";
-            ctx.textAlign = "center";
-            ctx.fillText(`${t.msg_wave}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
+            ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#ef4444"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_wave}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
         }
     } else if (GAME.isPaused) {
-        // ... existing pause draw ...
         if(GAME.mode === 'classic') {
              wallBlocks.forEach(b => {
                  if(!b.active) return;
@@ -2237,18 +2320,9 @@ function loop() {
         }
     }
 
-    // ... level clear logic ...
     if(levelCleared && GAME.state==='playing') { 
         GAME.state='leveling'; 
-        
-        // NEW: Increment independent mode level
-        if (GAME.modeLevels[GAME.mode]) {
-            GAME.modeLevels[GAME.mode]++;
-        } else {
-            GAME.modeLevels[GAME.mode] = 2;
-        }
-        
-        // Save progress immediately
+        if (GAME.modeLevels[GAME.mode]) { GAME.modeLevels[GAME.mode]++; } else { GAME.modeLevels[GAME.mode] = 2; }
         window.saveGame();
 
         if(GAME.mode === 'hostage') {
@@ -2261,18 +2335,13 @@ function loop() {
         }
         ui.notify.style.opacity=1; 
         
-        // Load the NEXT level from the stored mode data
         setTimeout(()=>{ 
             ui.notify.style.opacity=0; 
             const nextLvl = GAME.modeLevels[GAME.mode];
-            if(nextLvl < GAME.maxLevel){ 
-                startLevel(nextLvl); 
-                GAME.state='playing'; 
-            } 
+            if(nextLvl < GAME.maxLevel){ startLevel(nextLvl); GAME.state='playing'; } 
         }, 2000); 
     }
 
-    // BULLET LOGIC
     bullets.forEach(b => {
         if(!b.active) return;
         if(!GAME.isPaused) {
@@ -2281,12 +2350,15 @@ function loop() {
                 if(b.x>width || b.y<0 || b.y>height) { b.active=false; break; }
                 
                 if(GAME.mode === 'classic') {
-                    // ... existing classic collision ...
                     for(let w of wallBlocks) {
                         if(w.active && b.x>w.x && b.x<w.x+w.size && b.y>w.y && b.y<w.y+w.size) {
                             w.hp -= b.power; w.hitTimer=3;
                             if(w.hp<=0) { 
-                                w.active=false; GAME.score+=100; GAME.coins+=10; GAME.stats.totalScore += 100; GAME.stats.totalBlocks++; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++; checkHitmanCombo(); 
+                                w.active=false; 
+                                GAME.targetsHit++; 
+                                updateHitCounterUI(); 
+
+                                GAME.score+=100; GAME.coins+=10; GAME.stats.totalScore += 100; GAME.stats.totalBlocks++; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++; checkHitmanCombo(); 
                                 const debColor = w.type === 'metal' ? '#64748b' : '#a05a2c';
                                 if (SETTINGS.graphics !== 'low') { for(let k=0;k<6;k++) particles.push({x:w.x+w.size/2, y:w.y+w.size/2, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:debColor, size:w.size/3}); }
                             } else SoundSys.impact();
@@ -2295,12 +2367,15 @@ function loop() {
                     }
                 } 
                 else if(GAME.mode === 'reflex' || GAME.mode === 'hostage') {
-                    // ... existing reflex collision ...
                     for(let t of reflexTargets) {
                         if(t.active) {
                             const dist = Math.hypot(b.x - t.x, b.y - t.y);
                             if(dist < t.size/2) {
-                                t.active = false; GAME.targetsHit++; GAME.score+=200; GAME.coins+=20; GAME.stats.totalScore += 200; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++;
+                                t.active = false; 
+                                GAME.targetsHit++; 
+                                updateHitCounterUI();
+
+                                GAME.score+=200; GAME.coins+=20; GAME.stats.totalScore += 200; updateUI(); SoundSys.impact(); window.saveGame(); GAME.hitStreak++;
                                 if (SETTINGS.graphics !== 'low') { for(let k=0;k<8;k++) particles.push({x:t.x, y:t.y, vx:(Math.random()-0.5)*20, vy:(Math.random()-0.5)*20, life:1, color:'#ef4444', size:5}); }
                                 b.active = false; break;
                             }
@@ -2308,24 +2383,16 @@ function loop() {
                     }
                 }
                 else if(GAME.mode === 'defense') {
-                    // DEFENSE COLLISION
                     for(let e of defenseEnemies) {
                         if(e.active && b.x > e.x - e.size/2 && b.x < e.x + e.size/2 && b.y > e.y - e.size/2 && b.y < e.y + e.size/2) {
-                             e.hp -= b.power;
-                             e.hitTimer = 3;
+                             e.hp -= b.power; e.hitTimer = 3;
                              if(e.hp <= 0) {
                                  e.active = false;
                                  GAME.targetsHit++;
-                                 GAME.score += 150; GAME.coins += 15;
-                                 GAME.hitStreak++;
-                                 checkHitmanCombo();
-                                 updateUI(); SoundSys.impact();
-                                 if (SETTINGS.graphics !== 'low') {
-                                     for(let k=0;k<6;k++) particles.push({x:e.x, y:e.y, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:'#7f1d1d', size:5});
-                                 }
-                             } else {
-                                 SoundSys.impact();
-                             }
+                                 updateHitCounterUI();
+                                 GAME.score += 150; GAME.coins += 15; GAME.hitStreak++; checkHitmanCombo(); updateUI(); SoundSys.impact();
+                                 if (SETTINGS.graphics !== 'low') { for(let k=0;k<6;k++) particles.push({x:e.x, y:e.y, vx:(Math.random()-0.5)*15, vy:(Math.random()-0.5)*15, life:1, color:'#7f1d1d', size:5}); }
+                             } else { SoundSys.impact(); }
                              b.power -= 20; if(b.power<=0) { b.active=false; break; }
                         }
                     }
@@ -2335,7 +2402,6 @@ function loop() {
         ctx.beginPath(); ctx.moveTo(b.prevX, b.prevY); ctx.lineTo(b.x, b.y); ctx.strokeStyle='#ffffaa'; ctx.lineWidth=3; ctx.stroke();
     });
     
-    // ... existing particle/shell/gun update logic ...
     bullets = bullets.filter(b=>b.active);
     shells.forEach(s => { if(!GAME.isPaused) { s.x+=s.vx; s.y+=s.vy; s.vy+=GRAVITY; s.angle+=0.2; s.life--; if(s.y>height-20){s.y=height-20;s.vy*=-0.5;s.vx*=0.8;} } if(s.life>0){ ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle); ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-1.5,6,3); ctx.restore(); } }); shells = shells.filter(s=>s.life>0);
     magazines.forEach(m => { if(!GAME.isPaused) { m.x+=m.vx; m.y+=m.vy; m.vy+=GRAVITY; m.angle+=0.1; if(m.y>height-20){m.y=height-20;m.vy=0;m.vx=0;m.angle=Math.PI/2;} } ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.angle); ctx.fillStyle='#111'; ctx.fillRect(-7,-17,14,34); ctx.fillStyle='#333'; ctx.fillRect(-7,15,16,4); ctx.restore(); });
@@ -2346,6 +2412,7 @@ function loop() {
     else if(wType==='canik') drawDetailedCanik(ctx, gX, gY, gA, GUN.slideOffset);
     else if(wType==='magnum') drawDetailedMagnum(ctx, gX, gY, gA, GUN.slideOffset);
     else if(wType==='fn57') drawDetailedFN57(ctx, gX, gY, gA, GUN.slideOffset);
+    else if(wType==='mpt55') drawDetailedMPT55(ctx, gX, gY, gA, GUN.slideOffset);
     else drawDetailedGlock(ctx, gX, gY, gA, GUN.slideOffset);
 
     if(HITMAN_ANIM.active) drawHitmanEffect(ctx);
@@ -2356,7 +2423,6 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// Drawing Functions
 function drawDetailedGlock(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
     const skin = skinOverride || SKINS[GAME.currentSkin];
@@ -2364,7 +2430,6 @@ function drawDetailedGlock(ctx, x, y, angle, slideOffset, skinOverride = null, s
     const frameColor = skin.color; const slideColor = skin.slideColor === 'fade' ? null : skin.slideColor;
     ctx.fillStyle = frameColor; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.quadraticCurveTo(-15, 20, -18, 45); ctx.lineTo(-12, 60); ctx.lineTo(15, 60); ctx.lineTo(18, 45); ctx.lineTo(15, 18); ctx.quadraticCurveTo(30, 25, 25, 35); ctx.lineTo(15, 35); ctx.lineTo(5, 35); ctx.quadraticCurveTo(-5, 30, 5, 18); ctx.lineTo(15, 5); ctx.fill();
     
-    // Low Graphics Skip: Stippling
     if (SETTINGS.graphics === 'high') {
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; for(let i=0; i<50; i++) { const gx = (Math.random()*25) - 10; const gy = (Math.random()*30) + 25; ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI*2); ctx.fill(); }
     }
@@ -2379,7 +2444,6 @@ function drawDetailedGlock(ctx, x, y, angle, slideOffset, skinOverride = null, s
     if(slideColor === 'fade') { const grd = ctx.createLinearGradient(0, -20, 80, 0); grd.addColorStop(0, "#fbbf24"); grd.addColorStop(0.5, "#ec4899"); grd.addColorStop(1, "#6366f1"); ctx.fillStyle = grd; } else ctx.fillStyle = slideColor;
     ctx.beginPath(); ctx.roundRect(0, -18, 85, 20, [2, 2, 0, 0]); ctx.fill();
     
-    // Low Graphics Skip: Serrations
     if (SETTINGS.graphics !== 'low') {
         ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let i=0; i<6; i++) ctx.fillRect(5 + i*3, -16, 1.5, 16); for(let i=0; i<6; i++) ctx.fillRect(65 + i*3, -16, 1.5, 16); 
     }
@@ -2476,13 +2540,179 @@ function drawDetailedFN57(ctx, x, y, angle, slideOffset, skinOverride = null, si
     drawAttachments(ctx, sX, silencerId, 'fn57'); ctx.restore();
 }
 
+function drawDetailedMPT55(ctx, x, y, angle, slideOffset, skinOverride = null, silencerOverride = null) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+    const skin = skinOverride || SKINS[GAME.currentSkin];
+    const silencerId = silencerOverride || GAME.currentSilencer;
+    
+    // Renk Paleti (MPT Genelde Siyah veya Kamuflaj olur)
+    const isCamo = skin.id === 'skin_camo';
+    const mainColor = isCamo ? '#3f4e38' : (skin.color === '#1a1a1a' ? '#222' : skin.color);
+    const partColor = isCamo ? '#2c3327' : '#111';
+    const accentColor = '#333';
+
+    // --- DİPÇİK (STOCK) ---
+    // Dipçik tüpü (buffer tube)
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-85, -5, 40, 10);
+    // Dipçik Gövdesi
+    ctx.fillStyle = mainColor;
+    ctx.beginPath();
+    ctx.moveTo(-90, -10);
+    ctx.lineTo(-50, -10);
+    ctx.lineTo(-50, 15);
+    ctx.lineTo(-80, 25); // Dipçik altı eğimi
+    ctx.lineTo(-90, 25);
+    ctx.closePath();
+    ctx.fill();
+    // Dipçik Pedi (Lastik kısım)
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(-93, -12, 6, 40);
+    // Dipçik ayar mandalı
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-70, 15, 10, 5);
+
+    // --- GÖVDE (RECEIVER) ---
+    // Alt Gövde (Lower Receiver)
+    ctx.fillStyle = mainColor;
+    ctx.beginPath();
+    ctx.moveTo(-45, -8);
+    ctx.lineTo(10, -8);
+    ctx.lineTo(10, 10); // Şarjör yuvası önü
+    ctx.lineTo(-15, 10);
+    ctx.lineTo(-20, 25); // Kabza arkası
+    ctx.lineTo(-40, 25);
+    ctx.lineTo(-45, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Üst Gövde (Upper Receiver)
+    ctx.fillStyle = partColor;
+    ctx.fillRect(-45, -22, 60, 14);
+    
+    // --- KABZA (PISTOL GRIP) ---
+    ctx.fillStyle = mainColor;
+    ctx.beginPath();
+    ctx.moveTo(-25, 10);
+    ctx.quadraticCurveTo(-20, 30, -35, 45); // Ergonomik kavis
+    ctx.lineTo(-20, 48);
+    ctx.lineTo(-10, 25);
+    ctx.lineTo(-15, 10);
+    ctx.closePath();
+    ctx.fill();
+    // Kabza detayları (tırtık)
+    if(SETTINGS.graphics !== 'low') {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(-28, 20, 5, 20);
+    }
+
+    // --- ŞARJÖR (MAGAZINE) ---
+    // 30'luk STANAG Şarjör (Eğimli)
+    ctx.save();
+    ctx.translate(0, 10);
+    ctx.rotate(0.15); // Hafif öne eğik
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.moveTo(-5, 0);
+    ctx.lineTo(8, 0);
+    ctx.lineTo(5, 40); // Uzun şarjör
+    ctx.lineTo(-8, 38);
+    ctx.closePath();
+    ctx.fill();
+    // Şarjör çizgileri
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-4, 5, 8, 2);
+    ctx.fillRect(-3, 15, 7, 2);
+    ctx.fillRect(-2, 25, 6, 2);
+    ctx.restore();
+
+    // --- EL KUNDAĞI (HANDGUARD) & NAMLU ---
+    // El kundağı (Quad Rail görünümü)
+    ctx.fillStyle = mainColor;
+    ctx.fillRect(15, -20, 65, 18);
+    
+    // Ray detayları (Picatinny delikleri)
+    if(SETTINGS.graphics !== 'low') {
+        ctx.fillStyle = '#000';
+        for(let i=0; i<8; i++) {
+            ctx.beginPath();
+            ctx.arc(20 + i*8, -11, 2, 0, Math.PI*2);
+            ctx.fill();
+            // Üst ray tırtıkları
+            ctx.fillRect(20 + i*8, -22, 3, 2);
+        }
+    }
+
+    // Namlu
+    ctx.fillStyle = '#111';
+    ctx.fillRect(80, -14, 30, 6); // Namlu çıkıntısı
+
+    // Alev Gizleyen (Flash Hider)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(110, -15, 10, 8);
+    // Yarıklar
+    ctx.fillStyle = '#222';
+    ctx.fillRect(112, -15, 2, 8);
+    ctx.fillRect(116, -15, 2, 8);
+
+    // --- NİŞANGAH (SIGHTS) ---
+    // MPT-55 üzerinde genelde katlanır nişangah veya taşıma kolu olur. Biz ray üstü nişangah yapalım.
+    // Arka Nişangah
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-30, -28, 10, 6);
+    ctx.fillRect(-28, -32, 2, 4); // Gez deliği
+    
+    // Ön Nişangah
+    ctx.fillStyle = '#111';
+    ctx.fillRect(70, -26, 8, 6);
+    ctx.fillRect(73, -30, 2, 4); // Arpacık pimi
+
+    // --- MEKANİZMA (BOLT) ---
+    // Geri tepme simülasyonu için kovan atma boşluğu
+    ctx.fillStyle = '#000';
+    ctx.fillRect(-10, -18, 15, 6); // Ejection port
+    
+    // Bolt Carrier (Geri gidip gelen parça)
+    const boltPos = Math.min(10, slideOffset); // MPT'de bolt içeride hareket eder
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-10 - boltPos, -17, 14, 4);
+
+    // Tetik
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(-8, 5, 4, 0, Math.PI);
+    ctx.stroke();
+
+    drawSkinDetails(ctx, skin, 'mpt55');
+    
+    // Eklentiler
+    let attX = 20;
+    if(silencerId) attX += 15;
+    
+    drawAttachments(ctx, attX, silencerId, 'mpt55');
+    
+    ctx.restore();
+}
+
 function drawSkinDetails(ctx, skin, weaponType) {
-    if (SETTINGS.graphics === 'low') return; // Skip details on low graphics
+    if (SETTINGS.graphics === 'low') return; 
     let cx = 40; let cy = -8; let stripeYStart = -16; let stripeHeight = 3; let starBaseX = 5;
-    if (weaponType === 'beretta') { cx = 15; starBaseX = -5; } else if (weaponType === 'magnum') { cx = 90; starBaseX = 65; cy = -12; stripeYStart = -20; } else if (weaponType === 'fn57') { cx = 50; }
+    if (weaponType === 'beretta') { cx = 15; starBaseX = -5; } 
+    else if (weaponType === 'magnum') { cx = 90; starBaseX = 65; cy = -12; stripeYStart = -20; } 
+    else if (weaponType === 'fn57') { cx = 50; }
+    else if (weaponType === 'mpt55') { cx = 30; cy = -11; stripeYStart = -15; starBaseX = 20; }
+
     if (skin.id === 'skin_turkish') { ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#e30a17'; ctx.beginPath(); ctx.arc(cx+2, cy, 3, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+8, cy, 1, 0, Math.PI*2); ctx.fill(); }
     if (skin.id === 'skin_usa') { ctx.fillStyle = '#fff'; for(let i=0; i<3; i++) { ctx.fillRect(cx, stripeYStart + (i*6), 45, stripeHeight); } ctx.fillStyle = '#3c3b6e'; ctx.fillRect(starBaseX, stripeYStart-2, 40, 20); ctx.fillStyle = '#fff'; for(let r=0; r<3; r++) { for(let c=0; c<4; c++) { ctx.beginPath(); ctx.arc(starBaseX + 5 + c*10, stripeYStart + 2 + r*6, 1.5, 0, Math.PI*2); ctx.fill(); } } }
-    if (skin.id === 'skin_chrome') { ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(85, -18); ctx.lineTo(60, -10); ctx.fill(); }
+    if (skin.id === 'skin_camo') { 
+        // Basit camo deseni
+        ctx.fillStyle = '#2c3327';
+        for(let i=0; i<5; i++) {
+             ctx.beginPath();
+             ctx.arc(cx - 20 + i*15, cy + (i%2)*5, 8, 0, Math.PI*2);
+             ctx.fill();
+        }
+    }
 }
 
 function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock') {
@@ -2491,47 +2721,77 @@ function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock
     let silOffset = 0; let scopeOffset = 0; let laserX = 18; let laserY = 12;
     if (weaponType === 'beretta') { silOffset = 15; } if (weaponType === 'canik') { silOffset = 10; } if (weaponType === 'fn57') { silOffset = 15; }
     if (weaponType === 'magnum') { silOffset = 80; scopeOffset = 65; laserX = 60; laserY = 8; }
+    if (weaponType === 'mpt55') { silOffset = 110; scopeOffset = 20; laserX = 65; laserY = -5; } // MPT ayarları
+
     if (shouldDraw && silencerId) { 
         if (silencerId === 'silencer_gold') { ctx.fillStyle = '#ffd700'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#B8860B'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); } 
         else { ctx.fillStyle = '#222'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#444'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); }
     }
     const showAccessories = isPreview || GUN.attachments.scope;
-    if(showAccessories && GUN.attachments.scope) { const rX = sX + 15 + scopeOffset; ctx.fillStyle = '#111'; ctx.fillRect(rX, -18, 20, 4); ctx.beginPath(); ctx.moveTo(rX, -18); ctx.lineTo(rX, -28); ctx.lineTo(rX+20, -28); ctx.lineTo(rX+20, -18); ctx.fill(); ctx.fillStyle = 'rgba(0,255,255,0.2)'; ctx.fillRect(rX+2, -26, 16, 8); ctx.fillStyle = 'red'; ctx.fillRect(rX+9, -23, 2, 2); }
+    if(showAccessories && GUN.attachments.scope) { 
+        const rX = sX + 15 + scopeOffset; 
+        
+        // MPT için ACOG tarzı dürbün çizelim
+        if(weaponType === 'mpt55') {
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.moveTo(rX, -22); // Ray bağlantısı
+            ctx.lineTo(rX+10, -30); // Dürbün gövdesi altı
+            ctx.lineTo(rX-5, -35); // Oküler
+            ctx.lineTo(rX+35, -35); // Objektif üstü
+            ctx.lineTo(rX+40, -30); // Objektif altı
+            ctx.lineTo(rX+20, -22); // Ray bağlantısı ön
+            ctx.fill();
+            // Lens
+            ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
+            ctx.beginPath(); ctx.ellipse(rX+38, -32.5, 2, 4, 0, 0, Math.PI*2); ctx.fill();
+        } else {
+            // Standart Red Dot
+            ctx.fillStyle = '#111'; ctx.fillRect(rX, -18, 20, 4); ctx.beginPath(); ctx.moveTo(rX, -18); ctx.lineTo(rX, -28); ctx.lineTo(rX+20, -28); ctx.lineTo(rX+20, -18); ctx.fill(); ctx.fillStyle = 'rgba(0,255,255,0.2)'; ctx.fillRect(rX+2, -26, 16, 8); ctx.fillStyle = 'red'; ctx.fillRect(rX+9, -23, 2, 2); 
+        }
+    }
     const showLaser = isPreview || GUN.attachments.laser;
     if(showLaser && GUN.attachments.laser) { ctx.fillStyle = '#111'; ctx.fillRect(laserX, laserY, 25, 8); ctx.fillStyle = '#eab308'; ctx.fillRect(laserX + 22, laserY + 2, 2, 4); }
 }
 
 function resize() {
-    // RESOLUTION HANDLING FROM SETTINGS
-    const resString = SETTINGS.resolution || '1920x1080';
-    const [wStr, hStr] = resString.split('x');
-    const targetW = parseInt(wStr);
-    const targetH = parseInt(hStr);
+    let targetW, targetH;
+
+    if (SETTINGS.resolution === 'auto') {
+        targetW = window.innerWidth;
+        targetH = window.innerHeight;
+    } else {
+        const resString = SETTINGS.resolution;
+        const [wStr, hStr] = resString.split('x');
+        targetW = parseInt(wStr);
+        targetH = parseInt(hStr);
+    }
     
-    // Maintain Aspect Ratio for CSS (Always fit to window)
     const targetAspect = targetW / targetH;
     const windowW = window.innerWidth; 
     const windowH = window.innerHeight;
     
     let cssW, cssH;
     
-    // Fit to window logic (letterbox)
-    if (windowW / windowH > targetAspect) { 
-        cssH = windowH; 
-        cssW = cssH * targetAspect; 
-    } else { 
-        cssW = windowW; 
-        cssH = cssW / targetAspect; 
+    if (SETTINGS.resolution === 'auto') {
+        cssW = windowW;
+        cssH = windowH;
+    } else {
+        if (windowW / windowH > targetAspect) { 
+            cssH = windowH; 
+            cssW = cssH * targetAspect; 
+        } else { 
+            cssW = windowW; 
+            cssH = cssW / targetAspect; 
+        }
     }
     
     gameContainer.style.width = `${cssW}px`; 
     gameContainer.style.height = `${cssH}px`;
     
-    // ACTUAL CANVAS RESOLUTION (Controls sharpness/performance)
     width = canvas.width = targetW; 
     height = canvas.height = targetH;
     
-    // Game Elements Positioning Relative to Resolution
     GUN.y = height / 2; 
     GUN.x = width * 0.2;
     
@@ -2539,7 +2799,6 @@ function resize() {
     if(GAME.state === 'playing') startLevel(GAME.level);
 }
 
-// === NEW: RENDER PREVIEWS (Fixed Error) ===
 function renderPreviews() {
     const previews = document.querySelectorAll('.preview-canvas');
     previews.forEach(canvas => {
@@ -2552,52 +2811,77 @@ function renderPreviews() {
         const weaponId = canvas.getAttribute('data-weapon');
         
         ctx.save();
-        // Center the gun in the preview canvas
         const cx = w / 2;
         const cy = h / 2;
         
-        // Scale down slightly to fit
         ctx.translate(cx, cy);
-        ctx.scale(1.2, 1.2); 
+        
+        // MPT preview'da çok büyük görünebilir, ölçeği ayarlayalım
+        if(weaponId === 'mpt55' || (skinId && GAME.currentWeapon === 'mpt55')) {
+             ctx.scale(0.8, 0.8);
+        } else {
+             ctx.scale(1.2, 1.2); 
+        }
         
         if (skinId) {
-            // Previewing a Skin (Assume Glock for skin preview consistency)
             const skin = SKINS[skinId];
             if (skin.type === 'silencer') {
-                 // Draw Glock with this silencer
-                 drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId);
+                 // Eğer MPT seçiliyse MPT üzerinde göster
+                 if(GAME.currentWeapon === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0, null, skinId);
+                 else drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId);
             } else {
-                 // Draw Glock with this skin
+                 // Skin önizlemesi için tabanca standardı devam edebilir veya silaha göre değişebilir
+                 // Şimdilik tabanca üzerinde gösteriyoruz (default) ama MPT seçiliyse MPT'de gösterelim mi?
+                 // Kullanıcı genel skin bakıyorsa tabanca iyidir. Ama oyun mantığında skin type 'gun' ise her silaha uyar.
+                 // Basitlik için Glock üzerinde gösteriyoruz.
                  drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null);
             }
         } else if (weaponId) {
-            // Previewing a Weapon
             if(weaponId === 'glock') drawDetailedGlock(ctx, 0, 0, 0, 0);
             else if(weaponId === 'beretta') drawDetailedBeretta(ctx, 0, 0, 0, 0);
             else if(weaponId === 'canik') drawDetailedCanik(ctx, 0, 0, 0, 0);
             else if(weaponId === 'magnum') drawDetailedMagnum(ctx, 0, 0, 0, 0);
             else if(weaponId === 'fn57') drawDetailedFN57(ctx, 0, 0, 0, 0);
+            else if(weaponId === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0);
         }
         
         ctx.restore();
     });
 }
 
-// === NEW: RENDER RANK INFO ===
 function renderRankInfo() {
     ui.rankListContainer.innerHTML = '';
-    const currentRankIdx = getRankData().index;
+    
+    // Group ranks by category for cleaner list
+    const seenCategories = new Set();
+    const currentRank = getRankData();
     
     RANK_SYSTEM.forEach((rank, idx) => {
+        // Show only the first tier (I) in the list to save space, OR show all if you want detailed list
+        // Let's show all but highlight current
+        
+        // Skip general tiers > 9 for list brevity
+        if (rank.id === 'general' && rank.tier > 8) return;
+
         const div = document.createElement('div');
-        const unlocked = idx <= currentRankIdx;
+        const unlocked = GAME.level >= rank.min;
+        const isCurrent = GAME.level >= rank.min && GAME.level <= rank.max;
         div.className = `rank-item ${unlocked ? 'unlocked' : ''}`;
+        if(isCurrent) div.style.borderColor = rank.color;
+        
+        const t = TRANSLATIONS[SETTINGS.language];
+        const baseName = t[rank.baseNameKey] || rank.baseNameKey;
+        const roman = ROMAN[rank.tier] || "";
+        const fullName = `${baseName} ${roman}`;
+        
+        // Generate static SVG for list item
+        const svgContent = getRankSVG(rank);
         
         div.innerHTML = `
-            <svg style="width:40px; height:40px; fill:${unlocked ? rank.color : '#555'};" viewBox="0 0 24 24"><path d="${rank.icon}"/></svg>
+            <svg style="width:40px; height:40px; overflow:visible;" viewBox="0 0 40 40">${svgContent}</svg>
             <div style="flex:1;">
-                <div style="color:${unlocked ? '#fff' : '#777'}; font-weight:bold;">${rank.name}</div>
-                <div style="color:#666; font-size:0.8rem;">LEVEL ${rank.min} - ${rank.max}</div>
+                <div style="color:${unlocked ? '#fff' : '#777'}; font-weight:bold;">${fullName}</div>
+                <div style="color:#666; font-size:0.8rem;">LEVEL ${rank.min}</div>
             </div>
             ${rank.reward > 0 ? `<div style="color:#eab308; font-size:0.8rem; font-weight:bold;">+${rank.reward} $</div>` : ''}
         `;
@@ -2605,7 +2889,6 @@ function renderRankInfo() {
     });
 }
 
-// === NEW: RENDER PROFILE ===
 function renderProfile() {
     document.getElementById('prof-score').innerText = GAME.stats.totalScore.toLocaleString();
     document.getElementById('prof-cash').innerText = GAME.stats.totalScore.toLocaleString() + " $ (Lifetime)"; // Or simple cash
@@ -2613,11 +2896,10 @@ function renderProfile() {
     document.getElementById('prof-rank').style.color = getRankData().color;
     document.getElementById('prof-level').innerText = GAME.level;
     
-    // Weapon Usage
     const list = document.getElementById('weapon-usage-list');
     list.innerHTML = '';
     Object.keys(GAME.weaponUsage).forEach(key => {
-        if(GAME.weaponUsage[key] > 1000) { // Only show used weapons
+        if(GAME.weaponUsage[key] > 1000) { 
             const row = document.createElement('div');
             row.className = 'stat-row';
             const name = WEAPONS[key] ? WEAPONS[key].name : key;
@@ -2628,7 +2910,6 @@ function renderProfile() {
         }
     });
 
-    // Medals
     const mList = document.getElementById('medal-list');
     mList.innerHTML = '';
     MEDALS.forEach(m => {
@@ -2645,7 +2926,6 @@ function renderProfile() {
     });
 }
 
-// === NEW: CHECK MEDALS ===
 function checkMedals() {
     MEDALS.forEach(m => {
         if(!GAME.unlockedMedals.includes(m.id)) {
@@ -2666,4 +2946,3 @@ init();
 </script>
 </body>
 </html>
-
