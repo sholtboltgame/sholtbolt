@@ -308,6 +308,30 @@
         }
         .hit-icon { font-size: 1.2rem; filter: drop-shadow(0 0 5px rgba(234, 179, 8, 0.5)); }
         #hitCountDisplay { font-size: 1.5rem; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        
+        .comp-score-board {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: rgba(0,0,0,0.8);
+            border: 2px solid #eab308;
+            padding: 10px 30px;
+            border-radius: 10px;
+            z-index: 35;
+            pointer-events: none;
+            display: none;
+            flex-direction: column;
+        }
+        .comp-score-row { display: flex; align-items: center; gap: 20px; }
+        .comp-score-item { text-align: center; }
+        .comp-score-val { font-size: 2.5rem; font-weight: 900; color: #fff; }
+        .comp-score-label { font-size: 0.8rem; color: #aaa; font-weight: bold; }
+        .comp-divider { font-size: 2rem; color: #eab308; font-weight: bold; }
+        .comp-round-info { color: #fff; font-weight: bold; font-size: 1rem; margin-bottom: 5px; }
 
     </style>
 </head>
@@ -399,12 +423,20 @@
                     </div>
                 </div>
 
-                <div class="map-card locked-card">
-                     <div style="position:absolute; width:100%; height:100%; background:#0f172a; z-index:0;"></div>
-                    <div class="map-tag" data-lang="tag_locked">LOCKED</div>
+                <div class="map-card" onclick="window.selectMode('comp')">
+                     <div style="position:absolute; width:100%; height:100%; background:#0f172a; z-index:0; overflow:hidden;">
+                        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <line x1="0" y1="50" x2="100" y2="50" stroke="#eab308" stroke-width="2" stroke-dasharray="5,5"/>
+                            <rect x="10" y="20" width="20" height="10" fill="#ef4444"/>
+                            <rect x="10" y="70" width="20" height="10" fill="#3b82f6"/>
+                            <circle cx="80" cy="25" r="5" fill="#ef4444"/>
+                            <circle cx="80" cy="75" r="5" fill="#3b82f6"/>
+                        </svg>
+                     </div>
+                    <div class="map-tag" style="background:#eab308; color:black;">1 v 1</div>
                     <div class="map-info">
                         <div class="map-title" data-lang="mode_comp_title">COMPETITIVE</div>
-                        <div class="map-desc" data-lang="mode_comp_desc">Ranked matches. 5v5 Simulation. (Coming Soon)</div>
+                        <div class="map-desc" data-lang="mode_comp_desc">Side View. Guns on Left. 5 Rounds. 30s per round.</div>
                     </div>
                 </div>
             </div>
@@ -627,6 +659,23 @@
         <div id="hitCounterPanel" class="hud-element hit-counter-box">
             <div class="hit-icon">🎯</div>
             <div id="hitCountDisplay">0</div>
+        </div>
+        
+        <div id="compScoreBoard" class="comp-score-board hud-element">
+            <div class="comp-round-info" id="compRoundDisplay">ROUND 1 / 5</div>
+            <div class="comp-score-row">
+                <div class="comp-score-item">
+                    <div id="compWinPlayer" style="font-size:1.5rem; color:#22c55e;">0</div>
+                    <div id="compScorePlayer" class="comp-score-val" style="color:#22c55e">0</div>
+                    <div class="comp-score-label">YOU</div>
+                </div>
+                <div class="comp-divider">-</div>
+                <div class="comp-score-item">
+                    <div id="compWinBot" style="font-size:1.5rem; color:#ef4444;">0</div>
+                    <div id="compScoreBot" class="comp-score-val" style="color:#ef4444">0</div>
+                    <div class="comp-score-label">BOT</div>
+                </div>
+            </div>
         </div>
 
         <div id="hostagePanel" class="hostage-panel hud-element" style="display:none;"></div>
@@ -875,7 +924,7 @@ window.handleLogin = async () => {
                 if(data.saveData) {
                     GAME = { ...defaultGame, ...data.saveData };
                     // Safe guard for old saves
-                    if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
+                    if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1, comp:1};
                     SETTINGS.language = GAME.settings.lang || 'en';
                     SETTINGS.resolution = GAME.settings.res || 'auto'; 
                     SETTINGS.graphics = GAME.settings.gfx || 'high';
@@ -907,7 +956,7 @@ window.handleGuest = () => {
         let saved = JSON.parse(localStorage.getItem('glock_classic_save'));
         if(saved) {
              GAME = { ...defaultGame, ...saved };
-             if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
+             if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1, comp:1};
         }
     } catch(e) {}
     
@@ -971,7 +1020,13 @@ const ui = {
     leaderboardModal: document.getElementById('leaderboardModal'),
     menuRankWidget: document.querySelector('.menu-rank-widget'),
     menuRankIcon: document.getElementById('menuRankIcon'),
-    menuRankName: document.getElementById('menuRankName')
+    menuRankName: document.getElementById('menuRankName'),
+    compScoreBoard: document.getElementById('compScoreBoard'),
+    compScorePlayer: document.getElementById('compScorePlayer'),
+    compScoreBot: document.getElementById('compScoreBot'),
+    compRoundDisplay: document.getElementById('compRoundDisplay'),
+    compWinPlayer: document.getElementById('compWinPlayer'),
+    compWinBot: document.getElementById('compWinBot')
 };
 
 let width, height;
@@ -991,11 +1046,12 @@ const TRANSLATIONS = {
         mode_classic_title: "KARGO SAVUNMASI", mode_classic_desc: "Klasik oyun modu. Düşen kargo sandıklarını yok et ve puan kazan.",
         mode_defense_title: "SAVUNMA HATTI", mode_defense_desc: "Kutular saldırıyor! Sana temas etmeden hepsini yok et.",
         mode_range_title: "POLİGON", mode_range_desc: "Haraketli hedefler. Keskin nişancı eğitimi için ideal. (Yakında)",
-        mode_comp_title: "REKABETÇİ", mode_comp_desc: "Sıralamalı maçlar. 5v5 Simülasyonu. (Yakında)",
+        mode_comp_title: "REKABETÇİ", mode_comp_desc: "Sen vs Bot. 5 Raunt. Her raunt 30sn.",
         tut_reflex: "Kırmızı hedefler aniden belirir. Süre bitmeden vur!",
         tut_hostage: "REHİNEYİ KURTARMAK İÇİN HEPSİNİ VUR!",
         tut_classic: "Blokları yok et, para kazan ve silahını güçlendir.",
         tut_defense: "DÜŞMANLAR YAKLAŞIYOR! TEMAS ETMEDEN VUR!",
+        tut_comp: "5 RAUNT. BOTA KARŞI EN ÇOK PUANI TOPLA!",
         msg_timeup: "SÜRE BİTTİ!", msg_level_clear: "BÖLÜM GEÇİLDİ!", msg_all_saved: "TÜM REHİNELER KURTARILDI!", msg_saved: "REHİNE KURTARILDI!",
         msg_breach: "SINIR İHLALİ! YARALANDIN!", 
         msg_wave: "DALGA",
@@ -1003,7 +1059,9 @@ const TRANSLATIONS = {
         buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ",
         msg_score_saved: "SKOR KAYDEDİLDİ",
         resolution_label: "ÇÖZÜNÜRLÜK", tut_mouse: "Nişan almak için <span style='color:#eab308'>DOKUN</span> veya <span style='color:#eab308'>FARE</span> kullan.",
-        rank_private: "ER", rank_trigger: "TETİKÇİ", rank_chief: "OPERASYON ŞEFİ", rank_general: "GENERAL"
+        rank_private: "ER", rank_trigger: "TETİKÇİ", rank_chief: "OPERASYON ŞEFİ", rank_general: "GENERAL",
+        msg_you_win: "MAÇI KAZANDIN!", msg_you_lose: "MAÇI KAYBETTİN!", msg_bot_score: "BOT KAZANDI", msg_draw: "BERABERE!",
+        msg_round_win: "RAUNT KAZANILDI", msg_round_lose: "RAUNT KAYBEDİLDİ", msg_round_draw: "RAUNT BERABERE"
     },
     en: {
         lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION",
@@ -1013,11 +1071,12 @@ const TRANSLATIONS = {
         mode_classic_title: "CARGO DEFENSE", mode_classic_desc: "Classic mode. Destroy dropping crates and earn points.",
         mode_defense_title: "DEFENSE LINE", mode_defense_desc: "Enemies are rushing! Don't let them touch you.",
         mode_range_title: "SHOOTING RANGE", mode_range_desc: "Moving targets. Sniper training. (Coming Soon)",
-        mode_comp_title: "COMPETITIVE", mode_comp_desc: "Ranked matches. 5v5 Simulation. (Coming Soon)",
+        mode_comp_title: "COMPETITIVE", mode_comp_desc: "You vs Bot. 5 Rounds. 30s per round.",
         tut_reflex: "Red targets appear suddenly. Hit them before time runs out!",
         tut_hostage: "SHOOT THEM ALL TO SAVE THE HOSTAGE!",
         tut_classic: "Destroy blocks, earn cash, and upgrade weapon.",
         tut_defense: "ENEMIES INCOMING! DON'T LET THEM TOUCH YOU!",
+        tut_comp: "5 ROUNDS. SCORE HIGHER THAN THE BOT!",
         msg_timeup: "TIME UP!", msg_level_clear: "LEVEL CLEARED!", msg_all_saved: "ALL HOSTAGES RESCUED!", msg_saved: "HOSTAGE SAVED!",
         msg_breach: "BREACH DETECTED! MISSION FAILED!",
         msg_wave: "WAVE",
@@ -1025,7 +1084,9 @@ const TRANSLATIONS = {
         buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT",
         msg_score_saved: "SCORE SAVED",
         resolution_label: "RESOLUTION", tut_mouse: "Use <span style='color:#eab308'>TOUCH</span> or <span style='color:#eab308'>MOUSE</span> to aim.",
-        rank_private: "PRIVATE", rank_trigger: "TRIGGER", rank_chief: "OPS CHIEF", rank_general: "GENERAL"
+        rank_private: "PRIVATE", rank_trigger: "TRIGGER", rank_chief: "OPS CHIEF", rank_general: "GENERAL",
+        msg_you_win: "MATCH WON!", msg_you_lose: "MATCH LOST!", msg_bot_score: "BOT WINS", msg_draw: "DRAW!",
+        msg_round_win: "ROUND WON", msg_round_lose: "ROUND LOST", msg_round_draw: "ROUND DRAW"
     }
 };
 
@@ -1050,7 +1111,6 @@ const MEDALS = [
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
 
-// DYNAMIC RANK SYSTEM GENERATION
 const RANK_CATEGORIES = [
     { id: 'private', baseName: "rank_private", color: "#06b6d4", startLvl: 1, endLvl: 9, reward: 0 },
     { id: 'trigger', baseName: "rank_trigger", color: "#eab308", startLvl: 10, endLvl: 18, reward: 2000 },
@@ -1060,7 +1120,6 @@ const RANK_CATEGORIES = [
 
 const RANK_SYSTEM = [];
 RANK_CATEGORIES.forEach((cat, idx) => {
-    // For Private, Trigger, Chief (fixed 9 sub-ranks)
     if(cat.id !== 'general') {
         for(let i=0; i<9; i++) {
              RANK_SYSTEM.push({
@@ -1070,24 +1129,21 @@ RANK_CATEGORIES.forEach((cat, idx) => {
                  max: cat.startLvl + i, 
                  color: cat.color,
                  baseNameKey: cat.baseName,
-                 reward: (i===0 && idx>0) ? cat.reward : (i>0 ? 500 : 0) // Reward on new tier or sub-rank
+                 reward: (i===0 && idx>0) ? cat.reward : (i>0 ? 500 : 0)
              });
         }
     } else {
-        // General scales infinitely
-        // We define the first 9 levels explicitly for the list
         for(let i=0; i<9; i++) {
             RANK_SYSTEM.push({
                  id: cat.id,
                  tier: i,
                  min: cat.startLvl + i,
-                 max: cat.startLvl + i, // 1 level per rank for fast progression example
+                 max: cat.startLvl + i, 
                  color: cat.color,
                  baseNameKey: cat.baseName,
                  reward: (i===0) ? cat.reward : 1000
              });
         }
-        // Add a "Max General" entry
         RANK_SYSTEM.push({
              id: cat.id,
              tier: 9,
@@ -1128,7 +1184,10 @@ const defaultGame = {
     weaponUsage: {},
     unlockedMedals: [],
     redeemedCodes: [],
-    modeLevels: { classic: 1, reflex: 1, hostage: 1, defense: 1 },
+    modeLevels: { classic: 1, reflex: 1, hostage: 1, defense: 1, comp: 1 },
+    compScore: { player: 0, bot: 0 },
+    compWins: { player: 0, bot: 0 },
+    compRound: 1,
     isPaused: false,
     settings: { lang: 'en', res: 'auto', gfx: 'high' }
 };
@@ -1138,6 +1197,12 @@ let GAME = JSON.parse(JSON.stringify(defaultGame));
 const GUN = {
     x: 0, y: 0, angle: 0, recoilX: 0, recoilAngle: 0, slideOffset: 0, lastShot: 0, ammo: 15, maxAmmo: 15, reloading: false,
     attachments: { scope: false, silencer: false, laser: false }
+};
+
+// BOT STATE
+const BOT = {
+    x: 0, y: 0, angle: 0, recoilX: 0, recoilAngle: 0, slideOffset: 0, lastShot: 0, ammo: 999, target: null,
+    reactionTimer: 0, difficulty: 1, speed: 0.1
 };
 
 if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity;
@@ -1164,6 +1229,8 @@ window.selectMode = function(modeName) {
     if(modeName === 'reflex') modeTitle = t.mode_reflex_title;
     if(modeName === 'hostage') modeTitle = t.mode_hostage_title;
     if(modeName === 'defense') modeTitle = t.mode_defense_title;
+    if(modeName === 'comp') modeTitle = t.mode_comp_title;
+    
     ui.selectedModeDisplay.innerText = "MODE: " + modeTitle;
     GAME.state = 'menu';
     updateRankUI();
@@ -1186,6 +1253,7 @@ window.startGameFromMenu = function() {
     const t = TRANSLATIONS[SETTINGS.language];
 
     ui.hostagePanel.style.display = 'none';
+    ui.compScoreBoard.style.display = 'none';
 
     if(GAME.mode === 'reflex') {
         ui.tutObjective.innerText = t.tut_reflex;
@@ -1199,6 +1267,18 @@ window.startGameFromMenu = function() {
     } else if (GAME.mode === 'defense') {
         ui.tutObjective.innerText = t.tut_defense;
         ui.tutObjective.style.color = "#ef4444";
+    } else if (GAME.mode === 'comp') {
+        ui.tutObjective.innerText = t.tut_comp;
+        ui.tutObjective.style.color = "#eab308";
+        ui.compScoreBoard.style.display = 'flex';
+        GAME.compScore = { player: 0, bot: 0 };
+        GAME.compWins = { player: 0, bot: 0 };
+        GAME.compRound = 1;
+        ui.compScorePlayer.innerText = 0;
+        ui.compScoreBot.innerText = 0;
+        ui.compWinPlayer.innerText = 0;
+        ui.compWinBot.innerText = 0;
+        ui.compRoundDisplay.innerText = "ROUND 1 / 5";
     } else {
         ui.tutObjective.innerText = t.tut_classic;
         ui.tutObjective.style.color = "#22c55e";
@@ -1270,79 +1350,22 @@ const SoundSys = {
         SoundSys.resume();
         const t = actx.currentTime;
         const wType = GAME.currentWeapon;
-        
-        // Ayarlar
-        let punchFreq = 150;
-        let punchType = 'triangle';
-        let punchDecay = 0.2;
-        let noiseDecay = 0.3;
-        let noiseFilter = 2000;
-        let vol = 1.0;
-
-        if (wType === 'magnum') {
-            punchFreq = 100; punchDecay = 0.6; noiseDecay = 0.7; noiseFilter = 1500; punchType='square'; vol=1.2;
-        } else if (wType === 'mpt55') {
-            punchFreq = 200; punchDecay = 0.4; noiseDecay = 0.4; noiseFilter = 3000; punchType='sawtooth'; vol=1.0;
-        } else if (wType === 'fn57') {
-            punchFreq = 300; punchDecay = 0.15; noiseDecay = 0.2; noiseFilter = 4000; vol=0.8;
-        }
-
-        if (silenced) {
-            noiseFilter = 800; noiseDecay = 0.1; punchDecay = 0.1; vol *= 0.4; punchType='sine';
-        }
-
-        // 1. Tokluk (Punch) Katmanı
-        const osc = actx.createOscillator();
-        const oscGain = actx.createGain();
-        osc.type = punchType;
-        osc.frequency.setValueAtTime(punchFreq, t);
-        osc.frequency.exponentialRampToValueAtTime(10, t + punchDecay);
-        oscGain.gain.setValueAtTime(vol * 0.5, t);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, t + punchDecay);
-        osc.connect(oscGain);
-        oscGain.connect(actx.destination);
-        osc.start(t);
-        osc.stop(t + punchDecay);
-
-        // 2. Patlama (Blast) Katmanı (Noise)
-        const noiseSrc = actx.createBufferSource();
-        noiseSrc.buffer = noiseBuffer;
-        const noiseFilterNode = actx.createBiquadFilter();
-        const noiseGain = actx.createGain();
-        
-        noiseFilterNode.type = silenced ? 'lowpass' : 'bandpass';
-        noiseFilterNode.frequency.setValueAtTime(noiseFilter, t);
-        if(!silenced) noiseFilterNode.frequency.linearRampToValueAtTime(100, t + noiseDecay);
-
-        noiseGain.gain.setValueAtTime(vol, t);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + noiseDecay);
-
-        noiseSrc.connect(noiseFilterNode);
-        noiseFilterNode.connect(noiseGain);
-        noiseGain.connect(actx.destination);
-        noiseSrc.start(t);
-        noiseSrc.stop(t + noiseDecay);
+        let punchFreq = 150; let punchType = 'triangle'; let punchDecay = 0.2; let noiseDecay = 0.3; let noiseFilter = 2000; let vol = 1.0;
+        if (wType === 'magnum') { punchFreq = 100; punchDecay = 0.6; noiseDecay = 0.7; noiseFilter = 1500; punchType='square'; vol=1.2; } else if (wType === 'mpt55') { punchFreq = 200; punchDecay = 0.4; noiseDecay = 0.4; noiseFilter = 3000; punchType='sawtooth'; vol=1.0; } else if (wType === 'fn57') { punchFreq = 300; punchDecay = 0.15; noiseDecay = 0.2; noiseFilter = 4000; vol=0.8; }
+        if (silenced) { noiseFilter = 800; noiseDecay = 0.1; punchDecay = 0.1; vol *= 0.4; punchType='sine'; }
+        const osc = actx.createOscillator(); const oscGain = actx.createGain(); osc.type = punchType; osc.frequency.setValueAtTime(punchFreq, t); osc.frequency.exponentialRampToValueAtTime(10, t + punchDecay); oscGain.gain.setValueAtTime(vol * 0.5, t); oscGain.gain.exponentialRampToValueAtTime(0.01, t + punchDecay); osc.connect(oscGain); oscGain.connect(actx.destination); osc.start(t); osc.stop(t + punchDecay);
+        const noiseSrc = actx.createBufferSource(); noiseSrc.buffer = noiseBuffer; const noiseFilterNode = actx.createBiquadFilter(); const noiseGain = actx.createGain(); noiseFilterNode.type = silenced ? 'lowpass' : 'bandpass'; noiseFilterNode.frequency.setValueAtTime(noiseFilter, t); if(!silenced) noiseFilterNode.frequency.linearRampToValueAtTime(100, t + noiseDecay); noiseGain.gain.setValueAtTime(vol, t); noiseGain.gain.exponentialRampToValueAtTime(0.01, t + noiseDecay); noiseSrc.connect(noiseFilterNode); noiseFilterNode.connect(noiseGain); noiseGain.connect(actx.destination); noiseSrc.start(t); noiseSrc.stop(t + noiseDecay);
     },
-    buy: () => {
+    botShoot: () => {
         SoundSys.resume(); const t = actx.currentTime;
         const osc = actx.createOscillator(); const g = actx.createGain();
-        osc.type = 'sine'; osc.frequency.setValueAtTime(800, t); osc.frequency.linearRampToValueAtTime(1200, t+0.1);
-        g.gain.setValueAtTime(0.3, t); g.gain.linearRampToValueAtTime(0, t+0.1);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.2);
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(120, t); osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+        g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t + 0.1);
     },
-    reload: () => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, t); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.1);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1);
-    },
-    impact: () => {
-        SoundSys.resume(); const t = actx.currentTime;
-        const osc = actx.createOscillator(); const g = actx.createGain();
-        osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.1);
-        g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.1);
-        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1);
-    },
+    buy: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(800, t); osc.frequency.linearRampToValueAtTime(1200, t+0.1); g.gain.setValueAtTime(0.3, t); g.gain.linearRampToValueAtTime(0, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.2); },
+    reload: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, t); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1); },
+    impact: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.1); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.1); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1); },
     shell: () => { if(SETTINGS.graphics === 'low') return; setTimeout(()=>{ SoundSys.resume(); const t=actx.currentTime; const osc=actx.createOscillator(); const g=actx.createGain(); osc.frequency.setValueAtTime(1200,t); osc.frequency.exponentialRampToValueAtTime(800,t+0.05); g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.05); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.05); }, 200); },
     boxDrop: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='square'; osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.3); g.gain.setValueAtTime(0.5, t); g.gain.linearRampToValueAtTime(0, t+0.3); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.3); },
     levelup: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='triangle'; osc.frequency.setValueAtTime(440, t); osc.frequency.setValueAtTime(554, t+0.1); osc.frequency.setValueAtTime(659, t+0.2); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.6); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.6); },
@@ -1460,7 +1483,6 @@ function getRankData() {
         const r = RANK_SYSTEM[i];
         if(GAME.level >= r.min && GAME.level <= r.max) return { ...r, index: i };
     }
-    // Fallback to max rank
     return { ...RANK_SYSTEM[RANK_SYSTEM.length-1], index: RANK_SYSTEM.length-1 };
 }
 
@@ -1468,29 +1490,19 @@ function getFullRankName() {
     const rank = getRankData();
     const t = TRANSLATIONS[SETTINGS.language];
     const baseName = t[rank.baseNameKey] || rank.baseNameKey;
-    
-    // For general (index 27+), keep increasing roman numeral visual logic elsewhere, but here just say General
     if(rank.id === 'general' && rank.tier >= 9) return baseName + " (MAX)";
-
     const roman = ROMAN[rank.tier] || "";
     return roman ? `${baseName} ${roman}` : baseName;
 }
 
-// Function to generate dynamic SVG for ranks based on Tier
 function getRankSVG(rank) {
     let svgContent = "";
-    const tier = rank.tier; // 0 to 8 (I to IX)
+    const tier = rank.tier;
     
     if (rank.id === 'private') {
-        // Private: Sun rays / Chevrons
-        // Base line
-        const hasBottomBar = tier >= 3; // IV+
-        const hasMultiBar = tier >= 6;  // VII+
-        
-        // Rays
-        let rays = 2 + (tier % 3); // 2, 3, 4 rays cycling
-        
-        // Draw Rays
+        const hasBottomBar = tier >= 3; 
+        const hasMultiBar = tier >= 6; 
+        let rays = 2 + (tier % 3); 
         const cx = 20; const cy = 30;
         for(let i=0; i<rays; i++) {
             const spread = 40;
@@ -1500,81 +1512,32 @@ function getRankSVG(rank) {
             const y2 = cy + Math.sin(rad) * 20;
             svgContent += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#facc15" stroke-width="4" stroke-linecap="round" />`;
         }
-
-        // Bottom Bars
-        if (hasBottomBar) {
-            svgContent += `<rect x="5" y="32" width="30" height="3" fill="#06b6d4" />`;
-        }
-        if (hasMultiBar) {
-             svgContent += `<rect x="5" y="36" width="30" height="3" fill="#06b6d4" />`;
-             svgContent += `<rect x="5" y="28" width="30" height="3" fill="#06b6d4" />`;
-        }
-
+        if (hasBottomBar) svgContent += `<rect x="5" y="32" width="30" height="3" fill="#06b6d4" />`;
+        if (hasMultiBar) { svgContent += `<rect x="5" y="36" width="30" height="3" fill="#06b6d4" />`; svgContent += `<rect x="5" y="28" width="30" height="3" fill="#06b6d4" />`; }
     } else if (rank.id === 'trigger') {
-        // Trigger: Yellow Bar with Vertical stripes
         svgContent += `<rect x="2" y="10" width="36" height="20" fill="#facc15" />`;
-        const stripes = tier + 1; // 1 to 9 stripes
-        const startX = 5;
-        const gap = 3;
-        const w = 2;
-        
-        for(let i=0; i<stripes; i++) {
-             svgContent += `<rect x="${startX + i*(w+gap)}" y="10" width="${w}" height="20" fill="#111" />`;
-        }
-        
+        const stripes = tier + 1; const startX = 5; const gap = 3; const w = 2;
+        for(let i=0; i<stripes; i++) { svgContent += `<rect x="${startX + i*(w+gap)}" y="10" width="${w}" height="20" fill="#111" />`; }
     } else if (rank.id === 'chief') {
-        // Ops Chief: Yellow Bar with Stars
         svgContent += `<rect x="2" y="10" width="36" height="20" fill="#facc15" />`;
-        // Stars logic from image:
-        // I-III: 1-3 stars
-        // IV-V: 4-5 stars
-        // VI: Special Star (Wreath)
-        // VII+: Special Star + Normal Stars
-        
         const count = tier + 1;
-        
         if (count <= 5) {
-             // Just stars
-             for(let i=0; i<count; i++) {
-                 svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${8 + i*6}, 20) scale(1.2)" fill="black" />`;
-             }
+             for(let i=0; i<count; i++) svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${8 + i*6}, 20) scale(1.2)" fill="black" />`;
         } else {
-             // Special Star at start
-             svgContent += `<circle cx="8" cy="20" r="5" stroke="black" stroke-width="1" fill="none" />`; // Simple wreath rep
+             svgContent += `<circle cx="8" cy="20" r="5" stroke="black" stroke-width="1" fill="none" />`; 
              svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(8, 20) scale(1.5)" fill="black" />`;
-             
-             // Additional stars
-             const extra = count - 5; // VI -> 1 extra, etc. Wait image shows VI is just special star.
-             // VI (index 5) -> Special
-             // VII (index 6) -> Special + 1
              const normalStars = Math.max(0, count - 6); 
-             
-             for(let i=0; i<normalStars; i++) {
-                 svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="black" />`;
-             }
+             for(let i=0; i<normalStars; i++) svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="black" />`;
         }
-
     } else if (rank.id === 'general') {
-        // General: Red Bar with Yellow Stars/Laurels
         svgContent += `<rect x="2" y="10" width="36" height="20" fill="#ef4444" />`;
-        // Logic:
-        // I: Special Wreath Star + 4 stars? Or just complex.
-        // Let's simplified progression:
-        // Wreath Star always present. + Stars based on tier.
-        
-        // Draw Wreath Star
         svgContent += `<circle cx="8" cy="20" r="6" stroke="#facc15" stroke-width="1.5" fill="none" />`;
         svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(8, 20) scale(1.5)" fill="#facc15" />`;
-        
         const stars = tier; 
-        for(let i=0; i<stars; i++) {
-             svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="#111" />`;
-        }
+        for(let i=0; i<stars; i++) svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="#111" />`;
     }
-    
     return svgContent;
 }
-
 
 function updateRankUI() {
     const currentRank = getRankData();
@@ -1663,18 +1626,57 @@ function startLevel(lvl) {
         }
         const timePerBlock = Math.max(0.8, 2.5 - (lvl * 0.03)); 
         GAME.maxTime = Math.ceil(wallBlocks.length * timePerBlock) + 5; 
+        
+        GUN.x = width * 0.2; GUN.y = height / 2; 
+        
     } else if (GAME.mode === 'reflex') {
         GAME.targetsToHit = 10 + Math.floor(lvl * 1.5);
         GAME.maxTime = 30 + (lvl * 2); 
         reflexSpawnTimer = 0;
+        GUN.y = height + 50; GUN.x = width/2; 
+        
     } else if (GAME.mode === 'hostage') {
         GAME.targetsToHit = 5 + lvl + Math.floor(lvl/2); 
         GAME.maxTime = 25; 
         reflexSpawnTimer = 0;
+        GUN.y = height + 50; GUN.x = width/2;
+        
     } else if (GAME.mode === 'defense') {
         GAME.targetsToHit = 10 + Math.floor(lvl * 2); 
         GAME.maxTime = 60 + (lvl * 5); 
         defenseSpawnTimer = 0;
+        GUN.x = width * 0.2; GUN.y = height/2; 
+        
+    } else if (GAME.mode === 'comp') {
+        GAME.maxTime = 30; // 30 seconds per round
+        reflexSpawnTimer = 40; 
+        
+        // Reset only current hit counts, keep round wins
+        GAME.compScore = { player: 0, bot: 0 };
+        ui.compScorePlayer.innerText = 0;
+        ui.compScoreBot.innerText = 0;
+        ui.compRoundDisplay.innerText = `ROUND ${GAME.compRound} / 5`;
+        ui.compWinPlayer.innerText = GAME.compWins.player;
+        ui.compWinBot.innerText = GAME.compWins.bot;
+        
+        // Init Bot Position (Left side, Top half center)
+        BOT.x = width * 0.1;
+        BOT.y = height * 0.25; 
+        BOT.angle = 0; // Point Right
+        
+        // BOT DIFFICULTY SCALING (Exponential for 5 rounds)
+        // Round 1: Easy
+        // Round 2: Normal
+        // Round 3: Hard
+        // Round 4: Expert
+        // Round 5: Godlike
+        const roundMult = GAME.compRound;
+        BOT.difficulty = 1 + (lvl * 0.1) + (roundMult * 0.5);
+        BOT.speed = 0.04 + (roundMult * 0.04); // Speed increases each round (0.08 -> 0.24)
+        
+        // Init Player Position (Left side, Bottom half center)
+        GUN.x = width * 0.1;
+        GUN.y = height * 0.75;
     }
 
     GAME.timer = GAME.maxTime; GAME.lastTime = Date.now(); GAME.hitStreak = 0;
@@ -1692,14 +1694,60 @@ function gameOver(reason) {
 
     if(reason === 'breach') {
         ui.notify.innerText = t.msg_breach;
+    } else if (reason === 'lose') {
+        ui.notify.innerText = t.msg_you_lose || "MATCH LOST!";
+    } else if (reason === 'win') {
+        ui.notify.innerText = t.msg_you_win || "MATCH WON!";
+        ui.notify.style.color = "#22c55e";
+    } else if (reason === 'draw') {
+        ui.notify.innerText = t.msg_draw || "DRAW!";
+        ui.notify.style.color = "#fbbf24";
+    } else if (reason === 'round_win') {
+        ui.notify.innerText = t.msg_round_win || "ROUND WON";
+        ui.notify.style.color = "#22c55e";
+    } else if (reason === 'round_lose') {
+        ui.notify.innerText = t.msg_round_lose || "ROUND LOST";
+        ui.notify.style.color = "#ef4444";
+    } else if (reason === 'round_draw') {
+        ui.notify.innerText = t.msg_round_draw || "ROUND DRAW";
     } else {
         ui.notify.innerText = t.msg_timeup; 
     }
     
-    ui.notify.style.color = "#ef4444"; ui.notify.style.opacity = 1; SoundSys.error();
+    if(reason === 'lose' || reason === 'breach' || reason === 'round_lose') {
+         if(reason !== 'round_lose') ui.notify.style.color = "#ef4444"; 
+         SoundSys.error();
+    } else {
+        SoundSys.rankup();
+    }
+    
+    ui.notify.style.opacity = 1; 
+
     setTimeout(() => {
         ui.notify.style.opacity = 0; ui.notify.style.color = "#fff";
-        startLevel(GAME.level); GAME.state = 'playing';
+        // Competitive Logic
+        if (reason === 'round_win' || reason === 'round_lose' || reason === 'round_draw') {
+            GAME.compRound++;
+            startLevel(GAME.level); // Start next round
+            GAME.state = 'playing';
+        } else if (reason === 'win' && GAME.mode === 'comp') {
+             if (GAME.modeLevels[GAME.mode]) { GAME.modeLevels[GAME.mode]++; } else { GAME.modeLevels[GAME.mode] = 2; }
+             window.saveGame();
+             // Reset match for next play
+             GAME.compRound = 1;
+             GAME.compWins = { player: 0, bot: 0 };
+             startLevel(GAME.modeLevels[GAME.mode]);
+             GAME.state = 'playing';
+        } else if (reason === 'lose' && GAME.mode === 'comp') {
+             // Reset match retry
+             GAME.compRound = 1;
+             GAME.compWins = { player: 0, bot: 0 };
+             startLevel(GAME.level);
+             GAME.state = 'playing';
+        } else {
+             startLevel(GAME.level);
+             GAME.state = 'playing'; 
+        }
     }, 2000);
 }
 
@@ -2047,47 +2095,75 @@ function handleClick(e) {
     if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex') return;
     if(e.target.closest('.hud-element') || e.target.closest('.modal-content')) return;
 
+    // Competitive Mode Check: Only allow shooting in bottom half (Player Lane)
+    // if(GAME.mode === 'comp' && mouse.y < height / 2) return; // REMOVED THIS RESTRICTION SO PLAYER CAN AIM FREELY IN THEIR LANE
+
     SoundSys.resume(); if(GUN.reloading) return; if(GUN.ammo <= 0) { reload(); return; }
-    const now = Date.now(); if(now - GUN.lastShot > 110) { shoot(); GUN.lastShot = now; }
+    const now = Date.now(); if(now - GUN.lastShot > 110) { shoot('player'); GUN.lastShot = now; }
 }
 
-function shoot() {
-    GUN.ammo--; updateUI(); SoundSys.shoot(GUN.attachments.silencer); const rMod = GUN.attachments.silencer ? 0.8 : 1.0;
-    const weaponData = WEAPONS[GAME.currentWeapon]; const dmgMult = weaponData.damage || 1;
+function shoot(owner = 'player') {
+    let sourceX = GUN.x;
+    let sourceY = GUN.y;
+    let sourceAngle = GUN.angle;
+    let currentRecoil = GUN.recoilX;
+    let currentRecoilAngle = GUN.recoilAngle;
+    
+    if(owner === 'bot') {
+        sourceX = BOT.x;
+        sourceY = BOT.y;
+        sourceAngle = BOT.angle;
+        // Bot fake recoil setup could be added here if we had Bot render object
+    } else {
+        GUN.ammo--; updateUI(); 
+    }
+
+    const isSilenced = (owner === 'player' && GUN.attachments.silencer);
+    SoundSys.shoot(isSilenced); 
+
+    const rMod = isSilenced ? 0.8 : 1.0;
+    const weaponData = WEAPONS[GAME.currentWeapon]; 
+    const dmgMult = weaponData.damage || 1;
     let baseRecoil = 20; let baseAngle = -0.15;
-    if(GAME.currentWeapon === 'beretta') { baseRecoil = 25; baseAngle = -0.18; } 
-    if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } 
-    if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } 
-    if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
-    if(GAME.currentWeapon === 'mpt55') { baseRecoil = 28; baseAngle = -0.12; } // Tüfek olduğu için omuz desteği var, açısal tepme daha az ama hissi tok.
     
-    GUN.recoilX = baseRecoil * rMod; 
-    GUN.recoilAngle = baseAngle * rMod; 
-    GUN.slideOffset = (GAME.currentWeapon === 'magnum' || GAME.currentWeapon === 'mpt55') ? 40 : 25; 
+    if(owner === 'player') {
+        if(GAME.currentWeapon === 'beretta') { baseRecoil = 25; baseAngle = -0.18; } 
+        if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } 
+        if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } 
+        if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
+        if(GAME.currentWeapon === 'mpt55') { baseRecoil = 28; baseAngle = -0.12; }
+        
+        GUN.recoilX = baseRecoil * rMod; 
+        GUN.recoilAngle = baseAngle * rMod; 
+        GUN.slideOffset = (GAME.currentWeapon === 'magnum' || GAME.currentWeapon === 'mpt55') ? 40 : 25; 
+    }
+
+    let barrelLen = isSilenced ? 95 : 70; 
+    if(GAME.currentWeapon === 'mpt55') barrelLen = isSilenced ? 140 : 110;
+
+    let visualAngle = sourceAngle;
+    if(owner === 'player') visualAngle += GUN.recoilAngle * 0.5;
     
-    let barrelLen = GUN.attachments.silencer ? 95 : 70; 
-    if(GAME.currentWeapon === 'mpt55') barrelLen = GUN.attachments.silencer ? 140 : 110; // Tüfek namlusu uzun
-
-    const visualAngle = GUN.angle + GUN.recoilAngle * 0.5; 
-    const nX = (GUN.x - GUN.recoilX*0.5) + Math.cos(visualAngle) * barrelLen; 
-    const nY = GUN.y + Math.sin(visualAngle) * barrelLen; 
-    const fireAngle = GUN.angle; 
-
+    const nX = (sourceX - (owner === 'player' ? GUN.recoilX*0.5 : 0)) + Math.cos(visualAngle) * barrelLen; 
+    const nY = sourceY + Math.sin(visualAngle) * barrelLen; 
+    
     let spread = (Math.random()-0.5) * 0.015; 
-    if(GUN.attachments.scope) spread = 0; 
-    if(GAME.currentWeapon === 'mpt55') spread *= 0.6; // Tüfek daha isabetli
+    if(owner === 'player' && GUN.attachments.scope) spread = 0; 
+    if(GAME.currentWeapon === 'mpt55') spread *= 0.6;
 
     const damage = (45 + (GAME.weaponLevel - 1) * 10) * dmgMult;
     let bulletSpeed = 30; 
-    if(GAME.mode === 'reflex' || GAME.mode === 'hostage') bulletSpeed = 80;
+    if(GAME.mode === 'reflex' || GAME.mode === 'hostage' || GAME.mode === 'comp') bulletSpeed = 80;
 
     bullets.push({
-        x: nX, y: nY, vx: Math.cos(fireAngle + spread) * bulletSpeed, vy: Math.sin(fireAngle + spread) * bulletSpeed, 
-        prevX: nX, prevY: nY, active: true, power: damage
+        x: nX, y: nY, vx: Math.cos(sourceAngle + spread) * bulletSpeed, vy: Math.sin(sourceAngle + spread) * bulletSpeed, 
+        prevX: nX, prevY: nY, active: true, power: damage, owner: owner
     }); 
     
-    shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); SoundSys.shell(); 
-    if(!GUN.attachments.silencer && SETTINGS.graphics !== 'low') { flashTimer = 3; flashPos = {x:nX, y:nY, angle:visualAngle}; }
+    if(owner === 'player') {
+        shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); SoundSys.shell(); 
+        if(!GUN.attachments.silencer && SETTINGS.graphics !== 'low') { flashTimer = 3; flashPos = {x:nX, y:nY, angle:visualAngle}; }
+    }
 }
 
 function reload() {
@@ -2095,9 +2171,8 @@ function reload() {
     if(GAME.coins < GAME.reloadCost) { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); return; }
     GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; 
     
-    // Şarjör görseli ayarı
     let magW = 15; let magH = 35;
-    if(GAME.currentWeapon === 'mpt55') { magW = 20; magH = 45; } // MPT şarjörü daha büyük
+    if(GAME.currentWeapon === 'mpt55') { magW = 20; magH = 45; }
 
     magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: magW, height: magH }); 
     SoundSys.reload(); 
@@ -2109,7 +2184,7 @@ function drawHitmanEffect(ctx) {
     const t = TRANSLATIONS[SETTINGS.language];
     if (!HITMAN_ANIM.active) return; HITMAN_ANIM.timer--; if (HITMAN_ANIM.timer <= 0) { HITMAN_ANIM.active = false; return; }
     if (HITMAN_ANIM.timer > 70) HITMAN_ANIM.alpha += 0.05; else if (HITMAN_ANIM.timer < 20) HITMAN_ANIM.alpha -= 0.05; if (HITMAN_ANIM.alpha > 1) HITMAN_ANIM.alpha = 1; if (HITMAN_ANIM.alpha < 0) HITMAN_ANIM.alpha = 0;
-    const cx = width / 2; const cy = height / 2 - 50; ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300); gradient.addColorStop(0, 'rgba(220, 38, 38, 0.4)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); const scale = 1 + Math.sin(Date.now() * 0.01) * 0.05; ctx.translate(cx, cy); ctx.scale(scale * 3, scale * 3); const agentPath = new Path2D("M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10C22 6.48 17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"); ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; ctx.fill(agentPath); ctx.restore(); ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; ctx.textAlign = "center"; ctx.font = "900 60px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 30; ctx.fillText("HITMAN", cx, cy + 120); ctx.font = "bold 20px 'Segoe UI'"; ctx.fillStyle = "#ef4444"; ctx.shadowBlur = 0; ctx.fillText(`15 ${t.msg_hit_streak || 'STREAK'}`, cx, cy + 150); ctx.restore();
+    const cx = width / 2; const cy = height / 2 - 50; ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300); gradient.addColorStop(0, 'rgba(220, 38, 38, 0.4)'); gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); const scale = 1 + Math.sin(Date.now() * 0.01) * 0.05; ctx.translate(cx, cy); ctx.scale(scale * 3, scale * 3); const agentPath = new Path2D("M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10C22 6.48 17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3 3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"); ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 20; ctx.fill(agentPath); ctx.restore(); ctx.save(); ctx.globalAlpha = HITMAN_ANIM.alpha; ctx.textAlign = "center"; ctx.font = "900 60px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 30; ctx.fillText("HITMAN", cx, cy + 120); ctx.font = "bold 20px 'Segoe UI'"; ctx.fillStyle = "#ef4444"; ctx.shadowBlur = 0; ctx.fillText(`15 ${t.msg_hit_streak || 'STREAK'}`, cx, cy + 150); ctx.restore();
 }
 function drawRankUpEffect(ctx) {
     if (!RANK_UP_ANIM.active) return; RANK_UP_ANIM.timer--; if (RANK_UP_ANIM.timer <= 0) { RANK_UP_ANIM.active = false; return; }
@@ -2169,29 +2244,112 @@ function loop() {
             ctx.stroke();
             ctx.setLineDash([]);
         }
+
+        if(GAME.mode === 'comp') {
+            // Draw Split Screen Backgrounds
+            // Top Half (Bot)
+            ctx.fillStyle = 'rgba(30, 10, 10, 0.8)'; // Reddish dark
+            ctx.fillRect(0, 0, width, height/2);
+            
+            // Bottom Half (Player)
+            ctx.fillStyle = 'rgba(10, 15, 30, 0.5)'; // Bluish dark
+            ctx.fillRect(0, height/2, width, height/2);
+
+            // Draw Split Screen Line
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.strokeStyle = '#eab308';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+            
+            // Draw "VS" Circle in middle
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(width/2, height/2, 30, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#eab308'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.font = "bold 24px Segoe UI"; ctx.fillStyle = '#eab308'; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText("VS", width/2, height/2);
+            
+            // Draw Bot Gun (Detailed) on LEFT SIDE
+            const botSkin = { id: 'bot_red', color: '#7f1d1d', slideColor: '#991b1b', type: 'gun' };
+            // Rotation 0 means aiming right. Aim logic calculates angle to target (right).
+            drawDetailedGlock(ctx, BOT.x, BOT.y, BOT.angle, 0, botSkin);
+            
+            // Laser for Bot
+            const lx = BOT.x + Math.cos(BOT.angle) * 70; 
+            const ly = BOT.y + Math.sin(BOT.angle) * 70;
+            ctx.beginPath(); 
+            ctx.moveTo(lx, ly); 
+            ctx.lineTo(lx + Math.cos(BOT.angle)*2000, ly + Math.sin(BOT.angle)*2000); 
+            ctx.strokeStyle='rgba(239, 68, 68, 0.4)'; 
+            ctx.lineWidth=1; 
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
     }
 
     if (GAME.state === 'playing' && !GAME.isPaused) {
         if (!GAME.weaponUsage[GAME.currentWeapon]) GAME.weaponUsage[GAME.currentWeapon] = 0;
         GAME.weaponUsage[GAME.currentWeapon] += (dt * 1000); checkMedals();
-        GAME.timer -= dt; 
-        if (GAME.timer <= 0) { GAME.timer = 0; gameOver(); } 
+        
+        if (GAME.mode !== 'comp') {
+            GAME.timer -= dt; 
+            if (GAME.timer <= 0) { GAME.timer = 0; gameOver(); } 
+        } else {
+            // Comp Mode Timer (Countdown to end game)
+            GAME.timer -= dt;
+            if (GAME.timer <= 0) { 
+                GAME.timer = 0; 
+                // End Round Logic
+                if (GAME.compScore.player > GAME.compScore.bot) {
+                    GAME.compWins.player++;
+                    gameOver('round_win');
+                } else if (GAME.compScore.bot > GAME.compScore.player) {
+                    GAME.compWins.bot++;
+                    gameOver('round_lose');
+                } else {
+                    gameOver('round_draw');
+                }
+
+                // Check for Game Over (5 Rounds)
+                if (GAME.compRound >= 5) {
+                    setTimeout(() => {
+                        if (GAME.compWins.player > GAME.compWins.bot) gameOver('win');
+                        else if (GAME.compWins.bot > GAME.compWins.player) gameOver('lose');
+                        else gameOver('draw');
+                    }, 2500); // Wait for round result msg
+                }
+            }
+        }
         updateTimerUI();
     }
     if(UPGRADE.active) updateUpgradeAnim();
 
+    // Player Aim Logic
     const dx = mouse.x - GUN.x; const dy = mouse.y - GUN.y;
     if(!GAME.isPaused) {
         GUN.targetAngle = Math.atan2(dy, dx); 
         GUN.angle += (GUN.targetAngle - GUN.angle) * 0.2; 
     }
     GUN.recoilX *= 0.8; GUN.recoilAngle *= 0.8; GUN.slideOffset *= 0.8;
-    if(GUN.attachments.laser) { const bLen = GUN.attachments.silencer ? 95 : 70; const lx = (GUN.x - GUN.recoilX) + Math.cos(GUN.angle+GUN.recoilAngle)*bLen; const ly = GUN.y + Math.sin(GUN.angle+GUN.recoilAngle)*bLen; ctx.beginPath(); ctx.moveTo(lx, ly+10); ctx.lineTo(lx + Math.cos(GUN.angle)*2000, ly+10 + Math.sin(GUN.angle)*2000); ctx.strokeStyle='rgba(234, 179, 8, 0.5)'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#eab308'; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI*2); ctx.fill(); }
+    if(GUN.attachments.laser) { 
+        // Laser logic correction for rotation
+        const visualAngle = GUN.angle + GUN.recoilAngle; // Standard Right-facing geometry
+        const bLen = GUN.attachments.silencer ? 95 : 70; 
+        const lx = (GUN.x - GUN.recoilX) + Math.cos(visualAngle)*bLen; 
+        const ly = GUN.y + Math.sin(visualAngle)*bLen; 
+        ctx.beginPath(); ctx.moveTo(lx, ly); 
+        ctx.lineTo(lx + Math.cos(visualAngle)*2000, ly + Math.sin(visualAngle)*2000); 
+        ctx.strokeStyle='rgba(234, 179, 8, 0.5)'; ctx.lineWidth=2; ctx.stroke(); 
+        ctx.fillStyle='#eab308'; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI*2); ctx.fill(); 
+    }
 
     let levelCleared = false;
 
     if(GAME.state === 'playing' && !GAME.isPaused) {
         if(GAME.mode === 'classic') {
+            // ... (Classic Logic Kept Same)
             let allCleared = true;
             wallBlocks.forEach(b => {
                 if(b.active) {
@@ -2240,7 +2398,8 @@ function loop() {
             if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
             ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_targets || 'TARGETS'}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
         } else if (GAME.mode === 'hostage') {
-            reflexSpawnTimer--;
+            // ... (Hostage Logic Same)
+             reflexSpawnTimer--;
             if(reflexSpawnTimer <= 0) {
                 const size = 50; const padding = 100; const rx = padding + Math.random() * (width - padding*2); const ry = padding + Math.random() * (height - padding*2); const life = 90; 
                 reflexTargets.push({x: rx, y: ry, size: size, maxLife: life, life: life, active: true, id: Date.now()+Math.random()});
@@ -2267,6 +2426,7 @@ function loop() {
             if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
             ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#facc15"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_rescue || 'SAVED'}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
         } else if (GAME.mode === 'defense') {
+            // ... (Defense Logic Same)
             defenseSpawnTimer--;
             let spawnRate = 100 - Math.min(70, GAME.level * 4); 
             
@@ -2308,6 +2468,111 @@ function loop() {
 
             if(GAME.targetsHit >= GAME.targetsToHit) levelCleared = true;
             ctx.font = "bold 20px Segoe UI"; ctx.fillStyle = "#ef4444"; ctx.textAlign = "center"; ctx.fillText(`${t.msg_wave}: ${GAME.targetsHit} / ${GAME.targetsToHit}`, width/2, 50);
+        } else if (GAME.mode === 'comp') {
+            reflexSpawnTimer--;
+            
+            // Comp Logic: Simultaneous Targets (RIGHT SIDE)
+            if(reflexSpawnTimer <= 0) {
+                 const size = 50; 
+                 const margin = 80;
+                 const spawnX = width + 50; 
+                 
+                 // Player Target (Bottom Half)
+                 const pY = (height/2) + margin + Math.random() * ((height/2) - margin*2);
+                 
+                 // Bot Target (Top Half)
+                 const bY = margin + Math.random() * ((height/2) - margin*2);
+
+                 // Hız ve Hareket özellikleri - Raunt sayısına göre artar
+                 const roundBonus = GAME.compRound * 1.5;
+                 const speed = 4 + (GAME.level * 0.5) + roundBonus + (Math.random() * 2);
+                 const wobble = Math.random() > (0.6 - (GAME.compRound * 0.1)); // Yüksek rauntta daha çok dalgalanır
+
+                 // Spawn Pair
+                 reflexTargets.push({
+                     x: spawnX, y: pY, size: size, active: true, owner: 'player', 
+                     vx: speed, wobble: wobble, initY: pY, phase: Math.random() * Math.PI * 2 
+                 });
+                 reflexTargets.push({
+                     x: spawnX, y: bY, size: size, active: true, owner: 'bot', 
+                     vx: speed, wobble: wobble, initY: bY, phase: Math.random() * Math.PI * 2
+                 });
+                 
+                 SoundSys.blip();
+                 // Spawn süresi kısaldı (Zorluk için)
+                 reflexSpawnTimer = Math.max(15, 50 - (GAME.level + GAME.compRound * 5)); 
+            }
+            
+            // Bot Logic - Botun zorlanması için hedef takibi
+            let botHasTarget = false;
+            let closestDist = Infinity;
+            let target = null;
+            
+            reflexTargets.forEach(t => {
+                // Sadece ekranda olan ve botun hedeflerine odaklan
+                if(t.active && t.owner === 'bot' && t.x < width) {
+                    const d = Math.hypot(t.x - BOT.x, t.y - BOT.y);
+                    if(d < closestDist) { closestDist = d; target = t; }
+                }
+            });
+            
+            if(target) {
+                const leadX = target.x - (target.vx * (12 - GAME.compRound)); // Raunt arttıkça daha iyi lead alır
+                const dx = leadX - BOT.x;
+                const dy = target.y - BOT.y;
+                const targetAngle = Math.atan2(dy, dx); 
+                
+                // Botun dönüş hızı (speed)
+                BOT.angle += (targetAngle - BOT.angle) * BOT.speed;
+                
+                // Shoot if aligned
+                const angleDiff = Math.abs(BOT.angle - targetAngle);
+                
+                // Botun hata payı raunt arttıkça düşer (Daha isabetli)
+                const errorMargin = 0.25 - (GAME.compRound * 0.03); 
+                
+                if(angleDiff < errorMargin && BOT.reactionTimer <= 0) {
+                        shoot('bot');
+                        // Raunt arttıkça daha seri ateş eder
+                        BOT.reactionTimer = Math.max(5, 40 - (GAME.compRound * 6)); 
+                }
+                if(BOT.reactionTimer > 0) BOT.reactionTimer--;
+            } else {
+                BOT.angle += (0 - BOT.angle) * 0.05;
+            }
+
+            // Render Targets & Update Movement
+            reflexTargets.forEach(t => {
+                if(!t.active) return;
+                
+                t.x -= t.vx;
+                if(t.wobble) {
+                    t.y = t.initY + Math.sin((Date.now() * (0.005 + GAME.compRound * 0.001)) + t.phase) * 50;
+                }
+
+                if(t.x < -50) t.active = false; // Missed
+
+                ctx.save(); ctx.translate(t.x, t.y);
+                const isPlayer = t.owner === 'player';
+                const color = isPlayer ? '#22c55e' : '#ef4444';
+                
+                // Hedef Görseli
+                ctx.beginPath(); ctx.arc(0, 0, t.size/2, 0, Math.PI*2); ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.stroke();
+                ctx.fillStyle = isPlayer ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'; ctx.fill();
+                
+                // İç halka (Nişan noktası)
+                ctx.beginPath(); ctx.arc(0, 0, t.size/4, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+                
+                // Hız efekti çizgileri
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(t.size/2 + 5, -5); ctx.lineTo(t.size/2 + 20, -5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(t.size/2 + 5, 5); ctx.lineTo(t.size/2 + 15, 5); ctx.stroke();
+
+                ctx.restore();
+            });
+            
+            // Cleanup inactive
+            reflexTargets = reflexTargets.filter(t => t.active);
         }
     } else if (GAME.isPaused) {
         if(GAME.mode === 'classic') {
@@ -2396,6 +2661,31 @@ function loop() {
                              b.power -= 20; if(b.power<=0) { b.active=false; break; }
                         }
                     }
+                } else if (GAME.mode === 'comp') {
+                    // Comp Logic Hit Detection
+                    for(let t of reflexTargets) {
+                        if(t.active) {
+                            // Check if owner matches bullet owner
+                            const isMyTarget = (t.owner === b.owner);
+                            
+                            const dist = Math.hypot(b.x - t.x, b.y - t.y);
+                            if(dist < t.size/2 && isMyTarget) {
+                                t.active = false; 
+                                
+                                if(b.owner === 'player') {
+                                    GAME.compScore.player++;
+                                    ui.compScorePlayer.innerText = GAME.compScore.player;
+                                    SoundSys.impact();
+                                } else {
+                                    GAME.compScore.bot++;
+                                    ui.compScoreBot.innerText = GAME.compScore.bot;
+                                    // No sound for enemy hit to keep it clean, or faint sound
+                                }
+                                
+                                b.active = false; break;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2407,7 +2697,10 @@ function loop() {
     magazines.forEach(m => { if(!GAME.isPaused) { m.x+=m.vx; m.y+=m.vy; m.vy+=GRAVITY; m.angle+=0.1; if(m.y>height-20){m.y=height-20;m.vy=0;m.vx=0;m.angle=Math.PI/2;} } ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.angle); ctx.fillStyle='#111'; ctx.fillRect(-7,-17,14,34); ctx.fillStyle='#333'; ctx.fillRect(-7,15,16,4); ctx.restore(); });
     particles.forEach(p => { if(!GAME.isPaused) { p.x+=p.vx; p.y+=p.vy; p.vy+=GRAVITY; p.life-=0.02; } if(p.life>0){ ctx.globalAlpha=p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha=1; } }); particles = particles.filter(p=>p.life>0);
 
-    const wType = GAME.currentWeapon; const gX = GUN.x - GUN.recoilX; const gY = GUN.y; const gA = GUN.angle + GUN.recoilAngle;
+    const wType = GAME.currentWeapon; const gX = GUN.x - GUN.recoilX; const gY = GUN.y; 
+    // Player Angle: Simple Aim + Recoil
+    const gA = GUN.angle + GUN.recoilAngle;
+    
     if(wType==='beretta') drawDetailedBeretta(ctx, gX, gY, gA, GUN.slideOffset);
     else if(wType==='canik') drawDetailedCanik(ctx, gX, gY, gA, GUN.slideOffset);
     else if(wType==='magnum') drawDetailedMagnum(ctx, gX, gY, gA, GUN.slideOffset);
@@ -2792,8 +3085,9 @@ function resize() {
     width = canvas.width = targetW; 
     height = canvas.height = targetH;
     
-    GUN.y = height / 2; 
-    GUN.x = width * 0.2;
+    // Default pos update
+    GUN.y = height - 50; 
+    GUN.x = width * 0.5;
     
     containerRect = gameContainer.getBoundingClientRect();
     if(GAME.state === 'playing') startLevel(GAME.level);
@@ -2830,10 +3124,6 @@ function renderPreviews() {
                  if(GAME.currentWeapon === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0, null, skinId);
                  else drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId);
             } else {
-                 // Skin önizlemesi için tabanca standardı devam edebilir veya silaha göre değişebilir
-                 // Şimdilik tabanca üzerinde gösteriyoruz (default) ama MPT seçiliyse MPT'de gösterelim mi?
-                 // Kullanıcı genel skin bakıyorsa tabanca iyidir. Ama oyun mantığında skin type 'gun' ise her silaha uyar.
-                 // Basitlik için Glock üzerinde gösteriyoruz.
                  drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null);
             }
         } else if (weaponId) {
@@ -2857,10 +3147,6 @@ function renderRankInfo() {
     const currentRank = getRankData();
     
     RANK_SYSTEM.forEach((rank, idx) => {
-        // Show only the first tier (I) in the list to save space, OR show all if you want detailed list
-        // Let's show all but highlight current
-        
-        // Skip general tiers > 9 for list brevity
         if (rank.id === 'general' && rank.tier > 8) return;
 
         const div = document.createElement('div');
@@ -2874,7 +3160,6 @@ function renderRankInfo() {
         const roman = ROMAN[rank.tier] || "";
         const fullName = `${baseName} ${roman}`;
         
-        // Generate static SVG for list item
         const svgContent = getRankSVG(rank);
         
         div.innerHTML = `
