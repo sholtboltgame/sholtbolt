@@ -35,6 +35,30 @@
             height: 100%; 
         }
         
+        /* DEVELOPER CONSOLE */
+        #devConsole {
+            position: absolute; top: 0; left: 0; width: 100%; height: 250px;
+            background: rgba(0, 0, 0, 0.9); border-bottom: 2px solid #eab308;
+            z-index: 1000; display: none; flex-direction: column;
+            font-family: 'Courier New', monospace; padding: 10px; box-sizing: border-box;
+            backdrop-filter: blur(5px);
+            transition: transform 0.2s;
+        }
+        #consoleLog { 
+            flex: 1; overflow-y: auto; color: #ccc; font-size: 0.85rem; 
+            margin-bottom: 5px; white-space: pre-wrap; 
+            text-shadow: 0 0 2px #000;
+        }
+        #consoleInput { 
+            background: rgba(255,255,255,0.05); border: 1px solid #444; 
+            color: #eab308; font-family: inherit; font-size: 1rem; 
+            padding: 8px; width: 100%; outline: none; border-radius: 4px;
+        }
+        #consoleInput:focus { border-color: #eab308; background: rgba(0,0,0,0.5); }
+        .log-success { color: #22c55e; font-weight: bold; }
+        .log-error { color: #ef4444; }
+        .log-info { color: #3b82f6; }
+
         /* RESPONSIVE FONT & MENU AYARLARI */
         @media (max-width: 768px) {
             .lobby-header { font-size: 2.5rem !important; }
@@ -215,6 +239,8 @@
         .btn-buy { background: #eab308; color: black; }
         .btn-equip { background: #22c55e; color: white; }
         .btn-equipped { background: #333; color: #777; cursor: default; }
+        
+        .section-title { width: 100%; grid-column: 1 / -1; font-size: 1.5rem; font-weight: bold; color: #94a3b8; margin-top: 20px; border-bottom: 1px solid #333; padding-bottom: 5px; letter-spacing: 1px; }
 
         /* HOSTAGE HUD STYLES */
         .hostage-panel { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; pointer-events: none; z-index: 35; }
@@ -315,6 +341,13 @@
 
     <div id="gameContainer">
         
+        <!-- DEV CONSOLE -->
+        <div id="devConsole">
+            <div id="consoleLog">SHOLTBOLT DEVELOPER CONSOLE v1.0
+Type 'help' for commands.</div>
+            <input type="text" id="consoleInput" placeholder="> Enter command" onkeydown="if(event.key==='Enter') window.submitConsoleCommand()">
+        </div>
+
         <div id="authModal">
             <div class="auth-header">SHOLTBOLT</div>
             <div style="color:#94a3b8; font-size:1rem; margin-bottom:20px; letter-spacing:1px;">OPERATOR LOGIN</div>
@@ -416,14 +449,14 @@
                 <div class="menu-logo">SHOLTBOLT</div>
                 <div id="selectedModeDisplay" class="mode-display">MODE: CLASSIC</div>
                 
-                <div class="menu-card" onclick="window.toggleWeaponStore()">
+                <div class="menu-card" onclick="window.toggleInventory()">
                     <h3 data-lang="inventory">INVENTORY</h3>
-                    <p data-lang="inventory_desc">Select & Equip Weapons</p>
+                    <p data-lang="inventory_desc">Manage Your Gear</p>
                 </div>
 
-                <div class="menu-card" onclick="window.toggleStore()">
-                    <h3 data-lang="collection">COLLECTION</h3>
-                    <p data-lang="collection_desc">Special Skins</p>
+                <div class="menu-card" onclick="window.toggleShop()">
+                    <h3 data-lang="shop_title">STORE</h3>
+                    <p data-lang="collection_desc">Buy Weapons & Skins</p>
                 </div>
 
                 <div class="menu-card highlight" onclick="window.triggerMenuUpgrade()">
@@ -508,14 +541,14 @@
 
         <div id="storeModal" class="modal-overlay">
             <div class="modal-content">
-                <div class="modal-header"><div class="modal-title" data-lang="skins_title">WEAPON SKINS</div><div class="close-btn" onclick="window.toggleStore()" data-lang="close">CLOSE</div></div>
+                <div class="modal-header"><div class="modal-title" data-lang="shop_title">STORE</div><div class="close-btn" onclick="window.toggleShop()" data-lang="close">CLOSE</div></div>
                 <div id="storeSkinsList" class="items-grid"></div>
             </div>
         </div>
 
         <div id="weaponModal" class="modal-overlay">
             <div class="modal-content" style="border-color: #3b82f6;">
-                <div class="modal-header"><div class="modal-title" style="color:#3b82f6;" data-lang="inventory">INVENTORY</div><div class="close-btn" onclick="window.toggleWeaponStore()" data-lang="close">CLOSE</div></div>
+                <div class="modal-header"><div class="modal-title" style="color:#3b82f6;" data-lang="inventory">INVENTORY</div><div class="close-btn" onclick="window.toggleInventory()" data-lang="close">CLOSE</div></div>
                 <div id="weaponList" class="items-grid"></div>
             </div>
         </div>
@@ -805,8 +838,8 @@ window.toggleLeaderboard = async function() {
     if (modal.style.display === 'flex') {
         modal.style.display = 'none';
     } else {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isStoreOpen) window.toggleShop();
+        if(GAME.isWeaponStoreOpen) window.toggleInventory();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
@@ -971,7 +1004,10 @@ const ui = {
     leaderboardModal: document.getElementById('leaderboardModal'),
     menuRankWidget: document.querySelector('.menu-rank-widget'),
     menuRankIcon: document.getElementById('menuRankIcon'),
-    menuRankName: document.getElementById('menuRankName')
+    menuRankName: document.getElementById('menuRankName'),
+    devConsole: document.getElementById('devConsole'),
+    consoleLog: document.getElementById('consoleLog'),
+    consoleInput: document.getElementById('consoleInput')
 };
 
 let width, height;
@@ -1003,7 +1039,9 @@ const TRANSLATIONS = {
         buy: "SATIN AL", equip: "KUŞAN", equipped: "KUŞANILDI", next_rank: "SONRAKİ",
         msg_score_saved: "SKOR KAYDEDİLDİ",
         resolution_label: "ÇÖZÜNÜRLÜK", tut_mouse: "Nişan almak için <span style='color:#eab308'>DOKUN</span> veya <span style='color:#eab308'>FARE</span> kullan.",
-        rank_private: "ER", rank_trigger: "TETİKÇİ", rank_chief: "OPERASYON ŞEFİ", rank_general: "GENERAL"
+        rank_private: "ER", rank_trigger: "TETİKÇİ", rank_chief: "OPERASYON ŞEFİ", rank_general: "GENERAL",
+        collection: "MAĞAZA", collection_desc: "Silah ve Skin Satın Al", inventory_desc: "Ekipmanlarını Yönet",
+        shop_title: "MAĞAZA", section_weapons: "SİLAHLAR", section_skins: "KAPLAMALAR", owned: "SAHİP OLUNDU"
     },
     en: {
         lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION",
@@ -1025,7 +1063,9 @@ const TRANSLATIONS = {
         buy: "BUY", equip: "EQUIP", equipped: "EQUIPPED", next_rank: "NEXT",
         msg_score_saved: "SCORE SAVED",
         resolution_label: "RESOLUTION", tut_mouse: "Use <span style='color:#eab308'>TOUCH</span> or <span style='color:#eab308'>MOUSE</span> to aim.",
-        rank_private: "PRIVATE", rank_trigger: "TRIGGER", rank_chief: "OPS CHIEF", rank_general: "GENERAL"
+        rank_private: "PRIVATE", rank_trigger: "TRIGGER", rank_chief: "OPS CHIEF", rank_general: "GENERAL",
+        collection: "STORE", collection_desc: "Buy Weapons & Skins", inventory_desc: "Manage Your Gear",
+        shop_title: "STORE", section_weapons: "WEAPONS", section_skins: "SKINS", owned: "OWNED"
     }
 };
 
@@ -1257,6 +1297,57 @@ window.confirmExit = function() {
     SoundSys.buy();
 }
 
+// CONSOLE LOGIC
+window.toggleConsole = function() {
+    if(ui.devConsole.style.display === 'flex') {
+        ui.devConsole.style.display = 'none';
+        // Konsol kapandığında oyunun odağını kaybetmemesi için canvas'a odaklanabiliriz
+        if(GAME.state === 'playing' && !ui.exitModal.style.display.includes('flex')) {
+             // Oyun devam ediyor
+        }
+    } else {
+        ui.devConsole.style.display = 'flex';
+        ui.consoleInput.focus();
+        // Konsol açıldığında oyun inputlarını durdurmak isteyebiliriz ama şimdilik bırakalım
+    }
+}
+
+window.consoleLog = function(msg, type='normal') {
+    const p = document.createElement('div');
+    if(type==='success') p.className = 'log-success';
+    if(type==='error') p.className = 'log-error';
+    if(type==='info') p.className = 'log-info';
+    p.innerText = "> " + msg;
+    ui.consoleLog.appendChild(p);
+    ui.consoleLog.scrollTop = ui.consoleLog.scrollHeight;
+}
+
+window.submitConsoleCommand = function() {
+    const cmd = ui.consoleInput.value.trim();
+    ui.consoleInput.value = "";
+    if(!cmd) return;
+    
+    window.consoleLog(cmd);
+    
+    const parts = cmd.split(' ');
+    const command = parts[0].toLowerCase();
+    
+    if (command === '1453') {
+        GAME.coins += 400000;
+        updateUI();
+        updateMenuStats();
+        window.saveGame();
+        window.consoleLog("CONQUEST MODE ACTIVATED: +400,000 $ ADDED", 'success');
+        SoundSys.rankup();
+    } else if (command === 'help') {
+        window.consoleLog("Commands:\n- 1453: ???\n- clear: Clear console\n- fps: Toggle FPS (Not impl)", 'info');
+    } else if (command === 'clear') {
+        ui.consoleLog.innerHTML = "Console Cleared.";
+    } else {
+        window.consoleLog("Unknown command: " + command, 'error');
+    }
+}
+
 const actx = new (window.AudioContext || window.webkitAudioContext)();
 const noiseBuffer = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
 const output = noiseBuffer.getChannelData(0);
@@ -1391,13 +1482,24 @@ function init() {
     window.addEventListener('keydown', e => { 
         SoundSys.resume(); 
         if (e.key.toLowerCase() === 'r') reload(); 
+
+        // CONSOLE TOGGLE KEY: " or é
+        if (e.key === '"' || e.key === 'é') {
+            e.preventDefault(); // Yazmayı engelle
+            window.toggleConsole();
+        }
         
         if (e.key === 'Escape') {
+            if(ui.devConsole.style.display === 'flex') {
+                window.toggleConsole();
+                return;
+            }
+
             if (GAME.state === 'playing') {
                 if (GAME.isPaused) { window.closeExitModal(); } else { window.openExitModal(); }
             } else if (GAME.state === 'menu' && !ui.storeModal.style.display.includes('flex') && !GAME.isSettingsOpen && !GAME.isPromoOpen && !ui.leaderboardModal.style.display.includes('flex')) {
-            } else if (GAME.isStoreOpen) { window.toggleStore(); }
-            else if (GAME.isWeaponStoreOpen) { window.toggleWeaponStore(); }
+            } else if (GAME.isStoreOpen) { window.toggleShop(); }
+            else if (GAME.isWeaponStoreOpen) { window.toggleInventory(); }
             else if (GAME.isProfileOpen) { window.toggleProfile(); }
             else if (GAME.isRankInfoOpen) { window.toggleRankInfo(); }
             else if (GAME.isSettingsOpen) { window.toggleSettings(); }
@@ -1719,32 +1821,32 @@ function updateUI() {
     ui.gunName.innerText = weaponName.toUpperCase() + " | " + skinName.toUpperCase();
 }
 
-window.toggleStore = function() {
+window.toggleShop = function() {
     GAME.isStoreOpen = !GAME.isStoreOpen;
     ui.storeModal.style.display = GAME.isStoreOpen ? 'flex' : 'none';
     if(GAME.isStoreOpen) { 
         if(GAME.isRankInfoOpen) window.toggleRankInfo(); 
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isWeaponStoreOpen) window.toggleInventory();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
         if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        renderStore();
+        renderShop();
         requestAnimationFrame(renderPreviews);
     }
 }
 
-window.toggleWeaponStore = function() {
+window.toggleInventory = function() {
     GAME.isWeaponStoreOpen = !GAME.isWeaponStoreOpen;
     ui.weaponModal.style.display = GAME.isWeaponStoreOpen ? 'flex' : 'none';
     if(GAME.isWeaponStoreOpen) { 
         if(GAME.isRankInfoOpen) window.toggleRankInfo(); 
-        if(GAME.isStoreOpen) window.toggleStore();
+        if(GAME.isStoreOpen) window.toggleShop();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
         if(ui.leaderboardModal.style.display === 'flex') window.toggleLeaderboard();
-        renderWeaponStore(); 
+        renderInventory(); 
         requestAnimationFrame(renderPreviews);
     }
 }
@@ -1753,8 +1855,8 @@ window.toggleRankInfo = function() {
     GAME.isRankInfoOpen = !GAME.isRankInfoOpen;
     ui.rankInfoModal.style.display = GAME.isRankInfoOpen ? 'flex' : 'none';
     if(GAME.isRankInfoOpen) { 
-        if(GAME.isStoreOpen) window.toggleStore(); 
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isStoreOpen) window.toggleShop(); 
+        if(GAME.isWeaponStoreOpen) window.toggleInventory();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
@@ -1767,8 +1869,8 @@ window.toggleProfile = function() {
     GAME.isProfileOpen = !GAME.isProfileOpen;
     ui.profileModal.style.display = GAME.isProfileOpen ? 'flex' : 'none';
     if(GAME.isProfileOpen) {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isStoreOpen) window.toggleShop();
+        if(GAME.isWeaponStoreOpen) window.toggleInventory();
         if(GAME.isRankInfoOpen) window.toggleRankInfo();
         if(GAME.isSettingsOpen) window.toggleSettings();
         if(GAME.isPromoOpen) window.togglePromo();
@@ -1781,8 +1883,8 @@ window.toggleSettings = function() {
     GAME.isSettingsOpen = !GAME.isSettingsOpen;
     ui.settingsModal.style.display = GAME.isSettingsOpen ? 'flex' : 'none';
     if(GAME.isSettingsOpen) {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isStoreOpen) window.toggleShop();
+        if(GAME.isWeaponStoreOpen) window.toggleInventory();
         if(GAME.isRankInfoOpen) window.toggleRankInfo();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isPromoOpen) window.togglePromo();
@@ -1797,8 +1899,8 @@ window.togglePromo = function() {
     ui.promoInput.value = "";
     
     if(GAME.isPromoOpen) {
-        if(GAME.isStoreOpen) window.toggleStore();
-        if(GAME.isWeaponStoreOpen) window.toggleWeaponStore();
+        if(GAME.isStoreOpen) window.toggleShop();
+        if(GAME.isWeaponStoreOpen) window.toggleInventory();
         if(GAME.isRankInfoOpen) window.toggleRankInfo();
         if(GAME.isProfileOpen) window.toggleProfile();
         if(GAME.isSettingsOpen) window.toggleSettings();
@@ -1869,26 +1971,59 @@ window.changeGraphics = function(gfx) {
     window.saveGame();
 }
 
-function renderStore() {
+function renderShop() {
     ui.storeList.innerHTML = '';
     const t = TRANSLATIONS[SETTINGS.language];
     const btnTextBuy = t.buy || 'BUY';
-    const btnTextEquip = t.equip || 'EQUIP';
-    const btnTextEquipped = t.equipped || 'EQUIPPED';
-    
-    Object.values(SKINS).forEach(skin => {
-        const isOwned = GAME.ownedSkins.includes(skin.id);
-        const isActive = (skin.type === 'gun' && GAME.currentSkin === skin.id) || (skin.type === 'silencer' && GAME.currentSilencer === skin.id);
+    const txtOwned = t.owned || 'OWNED';
+    const txtWeapons = t.section_weapons || 'WEAPONS';
+    const txtSkins = t.section_skins || 'SKINS';
+
+    // 1. WEAPONS SECTION
+    const weaponTitle = document.createElement('div');
+    weaponTitle.className = 'section-title';
+    weaponTitle.innerText = txtWeapons;
+    ui.storeList.appendChild(weaponTitle);
+
+    Object.keys(WEAPONS).forEach(key => {
+        const w = WEAPONS[key];
+        const isOwned = GAME.ownedWeapons.includes(key);
         const card = document.createElement('div');
-        card.className = `item-card ${isActive ? 'active' : ''}`;
+        card.className = `item-card`;
         
         let btnHTML = '';
         if (isOwned) {
-            if (isActive) {
-                btnHTML = `<button class="action-btn btn-equipped" onclick="window.equipSkin('${skin.id}')">${btnTextEquipped}</button>`;
-            } else {
-                btnHTML = `<button class="action-btn btn-equip" onclick="window.equipSkin('${skin.id}')">${btnTextEquip}</button>`;
-            }
+            btnHTML = `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>`;
+        } else {
+             btnHTML = `<button class="action-btn" style="background:#eab308; color:black" onclick="window.buyWeapon('${key}')">${btnTextBuy}</button>`;
+        }
+
+        card.innerHTML = `
+            <div class="skin-preview-box">
+                <canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas>
+            </div>
+            <div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div>
+            <div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div>
+            <div style="color:#3b82f6; margin-bottom:5px; font-weight:bold;">${w.price} $</div>
+            ${btnHTML}
+        `;
+        ui.storeList.appendChild(card);
+    });
+
+    // 2. SKINS SECTION
+    const skinTitle = document.createElement('div');
+    skinTitle.className = 'section-title';
+    skinTitle.innerText = txtSkins;
+    ui.storeList.appendChild(skinTitle);
+
+    Object.values(SKINS).forEach(skin => {
+        const isOwned = GAME.ownedSkins.includes(skin.id);
+        const card = document.createElement('div');
+        card.className = `item-card`;
+        
+        let btnHTML = '';
+        if (isOwned) {
+            btnHTML = `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>`;
         } else {
             btnHTML = `<button class="action-btn btn-buy" onclick="window.buySkin('${skin.id}')">${btnTextBuy}</button>`;
         }
@@ -1905,30 +2040,32 @@ function renderStore() {
     });
 }
 
-function renderWeaponStore() {
+function renderInventory() {
     ui.weaponList.innerHTML = '';
     const t = TRANSLATIONS[SETTINGS.language];
-    const btnTextBuy = t.buy || 'BUY';
     const btnTextEquip = t.equip || 'EQUIP';
     const btnTextEquipped = t.equipped || 'EQUIPPED';
+    const txtWeapons = t.section_weapons || 'WEAPONS';
+    const txtSkins = t.section_skins || 'SKINS';
 
-    Object.keys(WEAPONS).forEach(key => {
+    // 1. OWNED WEAPONS
+    const weaponTitle = document.createElement('div');
+    weaponTitle.className = 'section-title';
+    weaponTitle.innerText = txtWeapons;
+    ui.weaponList.appendChild(weaponTitle);
+
+    GAME.ownedWeapons.forEach(key => {
         const w = WEAPONS[key];
-        const isOwned = GAME.ownedWeapons.includes(key);
         const isActive = GAME.currentWeapon === key;
         const card = document.createElement('div');
         card.className = `item-card ${isActive ? 'active' : ''}`;
         card.style.borderColor = isActive ? '#3b82f6' : '#333';
         
         let btnHTML = '';
-        if (isOwned) {
-            if (isActive) {
-                btnHTML = `<button class="action-btn" style="background:#333; color:#777" onclick="window.equipWeapon('${key}')">${btnTextEquipped}</button>`;
-            } else {
-                btnHTML = `<button class="action-btn" style="background:#3b82f6; color:white" onclick="window.equipWeapon('${key}')">${btnTextEquip}</button>`;
-            }
+        if (isActive) {
+            btnHTML = `<button class="action-btn" style="background:#333; color:#777; cursor:default;">${btnTextEquipped}</button>`;
         } else {
-             btnHTML = `<button class="action-btn" style="background:#eab308; color:black" onclick="window.buyWeapon('${key}')">${btnTextBuy}</button>`;
+            btnHTML = `<button class="action-btn" style="background:#3b82f6; color:white" onclick="window.equipWeapon('${key}')">${btnTextEquip}</button>`;
         }
 
         card.innerHTML = `
@@ -1937,7 +2074,38 @@ function renderWeaponStore() {
             </div>
             <div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div>
             <div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div>
-            <div style="color:#3b82f6; margin-bottom:5px; font-weight:bold;">${w.price} $</div>
+            ${btnHTML}
+        `;
+        ui.weaponList.appendChild(card);
+    });
+
+    // 2. OWNED SKINS
+    const skinTitle = document.createElement('div');
+    skinTitle.className = 'section-title';
+    skinTitle.innerText = txtSkins;
+    ui.weaponList.appendChild(skinTitle);
+
+    GAME.ownedSkins.forEach(skinId => {
+        const skin = SKINS[skinId];
+        // Skip if skin not found (data integrity)
+        if(!skin) return;
+
+        const isActive = (skin.type === 'gun' && GAME.currentSkin === skin.id) || (skin.type === 'silencer' && GAME.currentSilencer === skin.id);
+        const card = document.createElement('div');
+        card.className = `item-card ${isActive ? 'active' : ''}`;
+        
+        let btnHTML = '';
+        if (isActive) {
+            btnHTML = `<button class="action-btn btn-equipped" style="cursor:default;">${btnTextEquipped}</button>`;
+        } else {
+            btnHTML = `<button class="action-btn btn-equip" onclick="window.equipSkin('${skin.id}')">${btnTextEquip}</button>`;
+        }
+
+        card.innerHTML = `
+            <div class="skin-preview-box">
+                <canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas>
+            </div>
+            <div style="font-weight:bold; color:#fff">${skin.name}</div>
             ${btnHTML}
         `;
         ui.weaponList.appendChild(card);
@@ -1950,12 +2118,13 @@ window.buySkin = (id) => {
         GAME.coins -= s.price; 
         GAME.ownedSkins.push(id); 
         
-        if(s.type === 'silencer') GAME.currentSilencer = id; 
-        else GAME.currentSkin = id;
+        // Auto equip optional, let's keep manual equip via inventory to follow request strictness "Inventory -> Owned"
+        // But for UX, showing owned immediately is good.
+        // We do NOT auto equip here based on user request implication "Envanterde satın aldıklarım gözüksün".
         
         updateUI(); 
         updateMenuStats();
-        renderStore();
+        renderShop();
         window.saveGame(); 
         SoundSys.buy(); 
         requestAnimationFrame(renderPreviews);
@@ -1971,7 +2140,7 @@ window.equipSkin = (id) => {
     if(s.type === 'silencer') GAME.currentSilencer = id; 
     else GAME.currentSkin = id; 
     
-    renderStore(); 
+    renderInventory(); 
     window.saveGame(); 
     SoundSys.buy(); 
     updateUI(); 
@@ -1983,13 +2152,10 @@ window.buyWeapon = (key) => {
     if(GAME.coins >= w.price) {
         GAME.coins -= w.price; 
         GAME.ownedWeapons.push(key); 
-        GAME.currentWeapon = key; 
-        GUN.maxAmmo = w.capacity; 
-        GUN.ammo = w.capacity; 
         
         updateUI(); 
         updateMenuStats();
-        renderWeaponStore(); 
+        renderShop(); 
         window.saveGame(); 
         SoundSys.buy(); 
         requestAnimationFrame(renderPreviews);
@@ -2006,7 +2172,7 @@ window.equipWeapon = (key) => {
     GUN.maxAmmo = w.capacity; 
     GUN.ammo = w.capacity; 
     
-    renderWeaponStore(); 
+    renderInventory(); 
     window.saveGame(); 
     SoundSys.buy(); 
     updateUI(); 
@@ -2044,7 +2210,7 @@ function drawUpgradeEffect() {
 
 function handleClick(e) {
     if(GAME.state === 'menu' || GAME.state === 'lobby') return; 
-    if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex') return;
+    if(GAME.isStoreOpen || GAME.isWeaponStoreOpen || GAME.isRankInfoOpen || UPGRADE.active || GAME.isProfileOpen || GAME.isSettingsOpen || GAME.isPromoOpen || GAME.state !== 'playing' || GAME.isPaused || ui.leaderboardModal.style.display === 'flex' || ui.devConsole.style.display === 'flex') return;
     if(e.target.closest('.hud-element') || e.target.closest('.modal-content')) return;
 
     SoundSys.resume(); if(GUN.reloading) return; if(GUN.ammo <= 0) { reload(); return; }
