@@ -909,6 +909,10 @@ window.handleLogin = async () => {
                     GAME = { ...defaultGame, ...data.saveData };
                     // Safe guard for old saves
                     if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
+                    // Backwards compatibility for patches
+                    if(!GAME.ownedPatches) GAME.ownedPatches = ['patch_ops'];
+                    if(!GAME.currentPatch) GAME.currentPatch = 'patch_ops';
+                    
                     SETTINGS.language = GAME.settings.lang || 'en';
                     SETTINGS.resolution = GAME.settings.res || 'auto'; 
                     SETTINGS.graphics = GAME.settings.gfx || 'high';
@@ -941,6 +945,9 @@ window.handleGuest = () => {
         if(saved) {
              GAME = { ...defaultGame, ...saved };
              if(!GAME.modeLevels) GAME.modeLevels = {classic:1, reflex:1, hostage:1, defense:1};
+             // Backwards compatibility for patches
+             if(!GAME.ownedPatches) GAME.ownedPatches = ['patch_ops'];
+             if(!GAME.currentPatch) GAME.currentPatch = 'patch_ops';
         }
     } catch(e) {}
     
@@ -1041,7 +1048,8 @@ const TRANSLATIONS = {
         resolution_label: "ÇÖZÜNÜRLÜK", tut_mouse: "Nişan almak için <span style='color:#eab308'>DOKUN</span> veya <span style='color:#eab308'>FARE</span> kullan.",
         rank_private: "ER", rank_trigger: "TETİKÇİ", rank_chief: "OPERASYON ŞEFİ", rank_general: "GENERAL",
         collection: "MAĞAZA", collection_desc: "Silah ve Skin Satın Al", inventory_desc: "Ekipmanlarını Yönet",
-        shop_title: "MAĞAZA", section_weapons: "SİLAHLAR", section_skins: "KAPLAMALAR", owned: "SAHİP OLUNDU"
+        shop_title: "MAĞAZA", section_weapons: "SİLAHLAR", section_skins: "KAPLAMALAR", owned: "SAHİP OLUNDU",
+        section_patches: "YAMALAR", patch_tr: "TÜRK BAYRAĞI", patch_us: "ABD BAYRAĞI", patch_ops: "ÖZEL HAREKAT"
     },
     en: {
         lobby_header: "SHOLTBOLT", lobby_sub: "SELECT OPERATION",
@@ -1065,7 +1073,8 @@ const TRANSLATIONS = {
         resolution_label: "RESOLUTION", tut_mouse: "Use <span style='color:#eab308'>TOUCH</span> or <span style='color:#eab308'>MOUSE</span> to aim.",
         rank_private: "PRIVATE", rank_trigger: "TRIGGER", rank_chief: "OPS CHIEF", rank_general: "GENERAL",
         collection: "STORE", collection_desc: "Buy Weapons & Skins", inventory_desc: "Manage Your Gear",
-        shop_title: "STORE", section_weapons: "WEAPONS", section_skins: "SKINS", owned: "OWNED"
+        shop_title: "STORE", section_weapons: "WEAPONS", section_skins: "SKINS", owned: "OWNED",
+        section_patches: "PATCHES", patch_tr: "TURKISH FLAG", patch_us: "US FLAG", patch_ops: "SPEC OPS"
     }
 };
 
@@ -1076,6 +1085,12 @@ const WEAPONS = {
     'magnum': { name: 'Desert Eagle', capacity: 8, damage: 2.5, reloadTime: 1800, price: 9500, desc: "Hand Cannon. Pure Power." },
     'fn57': { name: 'FN Five-seveN', capacity: 20, damage: 1.1, reloadTime: 1100, price: 11000, desc: "20 Rounds. Armor Piercing." },
     'mpt55': { name: 'MPT-55', capacity: 30, damage: 1.4, reloadTime: 2200, price: 18000, desc: "National Infantry Rifle. 5.56mm." }
+};
+
+const PATCHES = {
+    'patch_ops': { id: 'patch_ops', nameKey: 'patch_ops', price: 0, desc: "Standard Issue." },
+    'patch_tr': { id: 'patch_tr', nameKey: 'patch_tr', price: 5000, desc: "Round Fabric Patch." },
+    'patch_us': { id: 'patch_us', nameKey: 'patch_us', price: 5000, desc: "Round Fabric Patch." }
 };
 
 const MEDALS = [
@@ -1100,42 +1115,23 @@ const RANK_CATEGORIES = [
 
 const RANK_SYSTEM = [];
 RANK_CATEGORIES.forEach((cat, idx) => {
-    // For Private, Trigger, Chief (fixed 9 sub-ranks)
     if(cat.id !== 'general') {
         for(let i=0; i<9; i++) {
              RANK_SYSTEM.push({
-                 id: cat.id,
-                 tier: i,
-                 min: cat.startLvl + i,
-                 max: cat.startLvl + i, 
-                 color: cat.color,
-                 baseNameKey: cat.baseName,
-                 reward: (i===0 && idx>0) ? cat.reward : (i>0 ? 500 : 0) // Reward on new tier or sub-rank
+                 id: cat.id, tier: i, min: cat.startLvl + i, max: cat.startLvl + i, 
+                 color: cat.color, baseNameKey: cat.baseName, reward: (i===0 && idx>0) ? cat.reward : (i>0 ? 500 : 0)
              });
         }
     } else {
-        // General scales infinitely
-        // We define the first 9 levels explicitly for the list
         for(let i=0; i<9; i++) {
             RANK_SYSTEM.push({
-                 id: cat.id,
-                 tier: i,
-                 min: cat.startLvl + i,
-                 max: cat.startLvl + i, // 1 level per rank for fast progression example
-                 color: cat.color,
-                 baseNameKey: cat.baseName,
-                 reward: (i===0) ? cat.reward : 1000
+                 id: cat.id, tier: i, min: cat.startLvl + i, max: cat.startLvl + i, 
+                 color: cat.color, baseNameKey: cat.baseName, reward: (i===0) ? cat.reward : 1000
              });
         }
-        // Add a "Max General" entry
         RANK_SYSTEM.push({
-             id: cat.id,
-             tier: 9,
-             min: cat.startLvl + 9,
-             max: 9999,
-             color: cat.color,
-             baseNameKey: cat.baseName,
-             reward: 1000
+             id: cat.id, tier: 9, min: cat.startLvl + 9, max: 9999,
+             color: cat.color, baseNameKey: cat.baseName, reward: 1000
         });
     }
 });
@@ -1149,6 +1145,10 @@ const SKINS = {
     'skin_usa': { id: 'skin_usa', name: 'Stars & Stripes', price: 6000, type: 'gun', color: '#3c3b6e', slideColor: '#b22234' },
     'skin_chrome': { id: 'skin_chrome', name: 'Chromium', price: 7000, type: 'gun', color: '#1a1a1a', slideColor: '#e8e8e8' },
     'skin_camo': { id: 'skin_camo', name: 'Digital Camo', price: 3500, type: 'gun', color: '#3f4e38', slideColor: '#2c3327' },
+    'skin_mpt_wrapped': { id: 'skin_mpt_wrapped', name: 'Wasteland Wrap', price: 8500, type: 'gun', color: '#4a4036', slideColor: '#5d5045' },
+    'skin_mpt_forest': { id: 'skin_mpt_forest', name: 'Forest Mesh', price: 6000, type: 'gun', color: '#2d3a28', slideColor: '#3a4a35' },
+    'skin_mpt_branches': { id: 'skin_mpt_branches', name: 'Deep Forest Ghillie', price: 9500, type: 'gun', color: '#3e2723', slideColor: '#4e342e' },
+    'skin_mpt_autumn': { id: 'skin_mpt_autumn', name: 'Autumn Stalker', price: 9200, type: 'gun', color: '#5d4037', slideColor: '#795548' },
     'silencer_default': { id: 'silencer_default', name: 'Standard Suppressor', price: 0, type: 'silencer', color: '#222' },
     'silencer_gold': { id: 'silencer_gold', name: 'Golden Suppressor', price: 6300, type: 'silencer', color: '#ffd700' }
 };
@@ -1159,8 +1159,10 @@ const defaultGame = {
     isPromoOpen: false,
     ownedSkins: ['skin_black', 'silencer_default'], 
     ownedWeapons: ['glock'],
+    ownedPatches: ['patch_ops'],
     currentWeapon: 'glock',
     currentSkin: 'skin_black', currentSilencer: 'silencer_default',
+    currentPatch: 'patch_ops',
     timer: 0, maxTime: 0, lastTime: 0, weaponLevel: 1, hitStreak: 0,
     stats: { totalScore: 0, totalBlocks: 0 },
     hostagesSaved: 0, totalHostages: 6,
@@ -1196,7 +1198,9 @@ const RANK_UP_ANIM = { active: false, timer: 0, text: "", subText: "", rewardTex
 
 window.selectMode = function(modeName) {
     GAME.mode = modeName;
-    GAME.level = GAME.modeLevels[modeName] || 1;
+    GAME.modeLevels[modeName] = 1;
+    GAME.level = 1;
+    
     ui.lobbyScreen.style.display = 'none';
     ui.mainMenu.style.display = 'flex';
     let t = TRANSLATIONS[SETTINGS.language];
@@ -1297,18 +1301,12 @@ window.confirmExit = function() {
     SoundSys.buy();
 }
 
-// CONSOLE LOGIC
 window.toggleConsole = function() {
     if(ui.devConsole.style.display === 'flex') {
         ui.devConsole.style.display = 'none';
-        // Konsol kapandığında oyunun odağını kaybetmemesi için canvas'a odaklanabiliriz
-        if(GAME.state === 'playing' && !ui.exitModal.style.display.includes('flex')) {
-             // Oyun devam ediyor
-        }
     } else {
         ui.devConsole.style.display = 'flex';
         ui.consoleInput.focus();
-        // Konsol açıldığında oyun inputlarını durdurmak isteyebiliriz ama şimdilik bırakalım
     }
 }
 
@@ -1340,7 +1338,7 @@ window.submitConsoleCommand = function() {
         window.consoleLog("CONQUEST MODE ACTIVATED: +400,000 $ ADDED", 'success');
         SoundSys.rankup();
     } else if (command === 'help') {
-        window.consoleLog("Commands:\n- 1453: ???\n- clear: Clear console\n- fps: Toggle FPS (Not impl)", 'info');
+        window.consoleLog("Commands:\n- 1453: ???\n- clear: Clear console", 'info');
     } else if (command === 'clear') {
         ui.consoleLog.innerHTML = "Console Cleared.";
     } else {
@@ -1362,7 +1360,6 @@ const SoundSys = {
         const t = actx.currentTime;
         const wType = GAME.currentWeapon;
         
-        // Ayarlar
         let punchFreq = 150;
         let punchType = 'triangle';
         let punchDecay = 0.2;
@@ -1382,7 +1379,6 @@ const SoundSys = {
             noiseFilter = 800; noiseDecay = 0.1; punchDecay = 0.1; vol *= 0.4; punchType='sine';
         }
 
-        // 1. Tokluk (Punch) Katmanı
         const osc = actx.createOscillator();
         const oscGain = actx.createGain();
         osc.type = punchType;
@@ -1395,7 +1391,6 @@ const SoundSys = {
         osc.start(t);
         osc.stop(t + punchDecay);
 
-        // 2. Patlama (Blast) Katmanı (Noise)
         const noiseSrc = actx.createBufferSource();
         noiseSrc.buffer = noiseBuffer;
         const noiseFilterNode = actx.createBiquadFilter();
@@ -1485,7 +1480,7 @@ function init() {
 
         // CONSOLE TOGGLE KEY: " or é
         if (e.key === '"' || e.key === 'é') {
-            e.preventDefault(); // Yazmayı engelle
+            e.preventDefault(); 
             window.toggleConsole();
         }
         
@@ -1519,6 +1514,20 @@ function initGameUI() {
     if (WEAPONS[GAME.currentWeapon]) GUN.maxAmmo = WEAPONS[GAME.currentWeapon].capacity;
     GUN.ammo = GUN.maxAmmo;
     
+    window.updateLanguageUI = function() {
+        const t = TRANSLATIONS[SETTINGS.language];
+        document.querySelectorAll('[data-lang]').forEach(el => {
+            const key = el.getAttribute('data-lang');
+            if (t[key]) {
+                 if(el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+                     el.innerText = t[key];
+                 } else {
+                     el.innerHTML = t[key];
+                 }
+            }
+        });
+    }
+
     window.updateLanguageUI();
     updateUI();
     updateRankUI();
@@ -1562,7 +1571,6 @@ function getRankData() {
         const r = RANK_SYSTEM[i];
         if(GAME.level >= r.min && GAME.level <= r.max) return { ...r, index: i };
     }
-    // Fallback to max rank
     return { ...RANK_SYSTEM[RANK_SYSTEM.length-1], index: RANK_SYSTEM.length-1 };
 }
 
@@ -1571,28 +1579,20 @@ function getFullRankName() {
     const t = TRANSLATIONS[SETTINGS.language];
     const baseName = t[rank.baseNameKey] || rank.baseNameKey;
     
-    // For general (index 27+), keep increasing roman numeral visual logic elsewhere, but here just say General
     if(rank.id === 'general' && rank.tier >= 9) return baseName + " (MAX)";
 
     const roman = ROMAN[rank.tier] || "";
     return roman ? `${baseName} ${roman}` : baseName;
 }
 
-// Function to generate dynamic SVG for ranks based on Tier
 function getRankSVG(rank) {
     let svgContent = "";
-    const tier = rank.tier; // 0 to 8 (I to IX)
+    const tier = rank.tier;
     
     if (rank.id === 'private') {
-        // Private: Sun rays / Chevrons
-        // Base line
-        const hasBottomBar = tier >= 3; // IV+
-        const hasMultiBar = tier >= 6;  // VII+
-        
-        // Rays
-        let rays = 2 + (tier % 3); // 2, 3, 4 rays cycling
-        
-        // Draw Rays
+        const hasBottomBar = tier >= 3;
+        const hasMultiBar = tier >= 6;
+        let rays = 2 + (tier % 3);
         const cx = 20; const cy = 30;
         for(let i=0; i<rays; i++) {
             const spread = 40;
@@ -1602,81 +1602,46 @@ function getRankSVG(rank) {
             const y2 = cy + Math.sin(rad) * 20;
             svgContent += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#facc15" stroke-width="4" stroke-linecap="round" />`;
         }
-
-        // Bottom Bars
-        if (hasBottomBar) {
-            svgContent += `<rect x="5" y="32" width="30" height="3" fill="#06b6d4" />`;
-        }
+        if (hasBottomBar) svgContent += `<rect x="5" y="32" width="30" height="3" fill="#06b6d4" />`;
         if (hasMultiBar) {
              svgContent += `<rect x="5" y="36" width="30" height="3" fill="#06b6d4" />`;
              svgContent += `<rect x="5" y="28" width="30" height="3" fill="#06b6d4" />`;
         }
-
     } else if (rank.id === 'trigger') {
-        // Trigger: Yellow Bar with Vertical stripes
         svgContent += `<rect x="2" y="10" width="36" height="20" fill="#facc15" />`;
-        const stripes = tier + 1; // 1 to 9 stripes
+        const stripes = tier + 1;
         const startX = 5;
         const gap = 3;
         const w = 2;
-        
         for(let i=0; i<stripes; i++) {
              svgContent += `<rect x="${startX + i*(w+gap)}" y="10" width="${w}" height="20" fill="#111" />`;
         }
-        
     } else if (rank.id === 'chief') {
-        // Ops Chief: Yellow Bar with Stars
         svgContent += `<rect x="2" y="10" width="36" height="20" fill="#facc15" />`;
-        // Stars logic from image:
-        // I-III: 1-3 stars
-        // IV-V: 4-5 stars
-        // VI: Special Star (Wreath)
-        // VII+: Special Star + Normal Stars
-        
         const count = tier + 1;
-        
         if (count <= 5) {
-             // Just stars
              for(let i=0; i<count; i++) {
                  svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${8 + i*6}, 20) scale(1.2)" fill="black" />`;
              }
         } else {
-             // Special Star at start
-             svgContent += `<circle cx="8" cy="20" r="5" stroke="black" stroke-width="1" fill="none" />`; // Simple wreath rep
+             svgContent += `<circle cx="8" cy="20" r="5" stroke="black" stroke-width="1" fill="none" />`;
              svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(8, 20) scale(1.5)" fill="black" />`;
-             
-             // Additional stars
-             const extra = count - 5; // VI -> 1 extra, etc. Wait image shows VI is just special star.
-             // VI (index 5) -> Special
-             // VII (index 6) -> Special + 1
              const normalStars = Math.max(0, count - 6); 
-             
              for(let i=0; i<normalStars; i++) {
                  svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="black" />`;
              }
         }
-
     } else if (rank.id === 'general') {
-        // General: Red Bar with Yellow Stars/Laurels
         svgContent += `<rect x="2" y="10" width="36" height="20" fill="#ef4444" />`;
-        // Logic:
-        // I: Special Wreath Star + 4 stars? Or just complex.
-        // Let's simplified progression:
-        // Wreath Star always present. + Stars based on tier.
-        
-        // Draw Wreath Star
         svgContent += `<circle cx="8" cy="20" r="6" stroke="#facc15" stroke-width="1.5" fill="none" />`;
         svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(8, 20) scale(1.5)" fill="#facc15" />`;
-        
         const stars = tier; 
         for(let i=0; i<stars; i++) {
              svgContent += `<polygon points="0,-4 1,-1 4,-1 2,1 3,4 0,2 -3,4 -2,1 -4,-1 -1,-1" transform="translate(${18 + i*6}, 20) scale(1.2)" fill="#111" />`;
         }
     }
-    
     return svgContent;
 }
-
 
 function updateRankUI() {
     const currentRank = getRankData();
@@ -1946,20 +1911,6 @@ window.changeLanguage = function(lang) {
     window.saveGame();
 }
 
-window.updateLanguageUI = function() {
-    const t = TRANSLATIONS[SETTINGS.language];
-    document.querySelectorAll('[data-lang]').forEach(el => {
-        const key = el.getAttribute('data-lang');
-        if (t[key]) {
-             if(el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
-                 el.innerText = t[key];
-             } else {
-                 el.innerHTML = t[key];
-             }
-        }
-    });
-}
-
 window.changeResolution = function(res) {
     SETTINGS.resolution = res;
     resize();
@@ -1978,8 +1929,9 @@ function renderShop() {
     const txtOwned = t.owned || 'OWNED';
     const txtWeapons = t.section_weapons || 'WEAPONS';
     const txtSkins = t.section_skins || 'SKINS';
+    const txtPatches = t.section_patches || 'PATCHES';
 
-    // 1. WEAPONS SECTION
+    // 1. WEAPONS
     const weaponTitle = document.createElement('div');
     weaponTitle.className = 'section-title';
     weaponTitle.innerText = txtWeapons;
@@ -1990,27 +1942,12 @@ function renderShop() {
         const isOwned = GAME.ownedWeapons.includes(key);
         const card = document.createElement('div');
         card.className = `item-card`;
-        
-        let btnHTML = '';
-        if (isOwned) {
-            btnHTML = `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>`;
-        } else {
-             btnHTML = `<button class="action-btn" style="background:#eab308; color:black" onclick="window.buyWeapon('${key}')">${btnTextBuy}</button>`;
-        }
-
-        card.innerHTML = `
-            <div class="skin-preview-box">
-                <canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas>
-            </div>
-            <div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div>
-            <div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div>
-            <div style="color:#3b82f6; margin-bottom:5px; font-weight:bold;">${w.price} $</div>
-            ${btnHTML}
-        `;
+        let btnHTML = isOwned ? `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>` : `<button class="action-btn" style="background:#eab308; color:black" onclick="window.buyWeapon('${key}')">${btnTextBuy}</button>`;
+        card.innerHTML = `<div class="skin-preview-box"><canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas></div><div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div><div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div><div style="color:#3b82f6; margin-bottom:5px; font-weight:bold;">${w.price} $</div>${btnHTML}`;
         ui.storeList.appendChild(card);
     });
 
-    // 2. SKINS SECTION
+    // 2. SKINS
     const skinTitle = document.createElement('div');
     skinTitle.className = 'section-title';
     skinTitle.innerText = txtSkins;
@@ -2020,22 +1957,24 @@ function renderShop() {
         const isOwned = GAME.ownedSkins.includes(skin.id);
         const card = document.createElement('div');
         card.className = `item-card`;
-        
-        let btnHTML = '';
-        if (isOwned) {
-            btnHTML = `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>`;
-        } else {
-            btnHTML = `<button class="action-btn btn-buy" onclick="window.buySkin('${skin.id}')">${btnTextBuy}</button>`;
-        }
+        let btnHTML = isOwned ? `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>` : `<button class="action-btn btn-buy" onclick="window.buySkin('${skin.id}')">${btnTextBuy}</button>`;
+        card.innerHTML = `<div class="skin-preview-box"><canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas></div><div style="font-weight:bold; color:#fff">${skin.name}</div><div style="color:#eab308; margin-bottom:5px;">${skin.price} $</div>${btnHTML}`;
+        ui.storeList.appendChild(card);
+    });
+    
+    // 3. PATCHES
+    const patchTitle = document.createElement('div');
+    patchTitle.className = 'section-title';
+    patchTitle.innerText = txtPatches;
+    ui.storeList.appendChild(patchTitle);
 
-        card.innerHTML = `
-            <div class="skin-preview-box">
-                <canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas>
-            </div>
-            <div style="font-weight:bold; color:#fff">${skin.name}</div>
-            <div style="color:#eab308; margin-bottom:5px;">${skin.price} $</div>
-            ${btnHTML}
-        `;
+    Object.values(PATCHES).forEach(patch => {
+        const isOwned = GAME.ownedPatches && GAME.ownedPatches.includes(patch.id);
+        const card = document.createElement('div');
+        card.className = `item-card`;
+        const name = t[patch.nameKey] || patch.nameKey;
+        let btnHTML = isOwned ? `<button class="action-btn btn-equipped" style="cursor:default;">${txtOwned}</button>` : `<button class="action-btn btn-buy" onclick="window.buyPatch('${patch.id}')">${btnTextBuy}</button>`;
+        card.innerHTML = `<div class="skin-preview-box"><canvas class="preview-canvas" data-patch="${patch.id}" width="100" height="100"></canvas></div><div style="font-weight:bold; color:#fff">${name}</div><div style="color:#eab308; margin-bottom:5px;">${patch.price} $</div>${btnHTML}`;
         ui.storeList.appendChild(card);
     });
 }
@@ -2047,8 +1986,9 @@ function renderInventory() {
     const btnTextEquipped = t.equipped || 'EQUIPPED';
     const txtWeapons = t.section_weapons || 'WEAPONS';
     const txtSkins = t.section_skins || 'SKINS';
+    const txtPatches = t.section_patches || 'PATCHES';
 
-    // 1. OWNED WEAPONS
+    // 1. WEAPONS
     const weaponTitle = document.createElement('div');
     weaponTitle.className = 'section-title';
     weaponTitle.innerText = txtWeapons;
@@ -2060,26 +2000,12 @@ function renderInventory() {
         const card = document.createElement('div');
         card.className = `item-card ${isActive ? 'active' : ''}`;
         card.style.borderColor = isActive ? '#3b82f6' : '#333';
-        
-        let btnHTML = '';
-        if (isActive) {
-            btnHTML = `<button class="action-btn" style="background:#333; color:#777; cursor:default;">${btnTextEquipped}</button>`;
-        } else {
-            btnHTML = `<button class="action-btn" style="background:#3b82f6; color:white" onclick="window.equipWeapon('${key}')">${btnTextEquip}</button>`;
-        }
-
-        card.innerHTML = `
-            <div class="skin-preview-box" style="border-color:${isActive?'#3b82f6':'#333'}">
-                <canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas>
-            </div>
-            <div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div>
-            <div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div>
-            ${btnHTML}
-        `;
+        let btnHTML = isActive ? `<button class="action-btn" style="background:#333; color:#777; cursor:default;">${btnTextEquipped}</button>` : `<button class="action-btn" style="background:#3b82f6; color:white" onclick="window.equipWeapon('${key}')">${btnTextEquip}</button>`;
+        card.innerHTML = `<div class="skin-preview-box" style="border-color:${isActive?'#3b82f6':'#333'}"><canvas class="preview-canvas" data-weapon="${key}" width="200" height="100"></canvas></div><div style="font-weight:bold; color:#fff; font-size:1.2rem;">${w.name}</div><div style="color:#888; font-size:0.8rem; margin:5px 0;">${w.desc}</div>${btnHTML}`;
         ui.weaponList.appendChild(card);
     });
 
-    // 2. OWNED SKINS
+    // 2. SKINS
     const skinTitle = document.createElement('div');
     skinTitle.className = 'section-title';
     skinTitle.innerText = txtSkins;
@@ -2087,29 +2013,49 @@ function renderInventory() {
 
     GAME.ownedSkins.forEach(skinId => {
         const skin = SKINS[skinId];
-        // Skip if skin not found (data integrity)
         if(!skin) return;
-
         const isActive = (skin.type === 'gun' && GAME.currentSkin === skin.id) || (skin.type === 'silencer' && GAME.currentSilencer === skin.id);
         const card = document.createElement('div');
         card.className = `item-card ${isActive ? 'active' : ''}`;
-        
-        let btnHTML = '';
-        if (isActive) {
-            btnHTML = `<button class="action-btn btn-equipped" style="cursor:default;">${btnTextEquipped}</button>`;
-        } else {
-            btnHTML = `<button class="action-btn btn-equip" onclick="window.equipSkin('${skin.id}')">${btnTextEquip}</button>`;
-        }
-
-        card.innerHTML = `
-            <div class="skin-preview-box">
-                <canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas>
-            </div>
-            <div style="font-weight:bold; color:#fff">${skin.name}</div>
-            ${btnHTML}
-        `;
+        let btnHTML = isActive ? `<button class="action-btn btn-equipped" style="cursor:default;">${btnTextEquipped}</button>` : `<button class="action-btn btn-equip" onclick="window.equipSkin('${skin.id}')">${btnTextEquip}</button>`;
+        card.innerHTML = `<div class="skin-preview-box"><canvas class="preview-canvas" data-skin="${skin.id}" width="200" height="100"></canvas></div><div style="font-weight:bold; color:#fff">${skin.name}</div>${btnHTML}`;
         ui.weaponList.appendChild(card);
     });
+
+    // 3. PATCHES
+    const patchTitle = document.createElement('div');
+    patchTitle.className = 'section-title';
+    patchTitle.innerText = txtPatches;
+    ui.weaponList.appendChild(patchTitle);
+
+    if(GAME.ownedPatches) {
+        GAME.ownedPatches.forEach(patchId => {
+            const patch = PATCHES[patchId];
+            if(!patch) return;
+            const isActive = GAME.currentPatch === patch.id;
+            const card = document.createElement('div');
+            card.className = `item-card ${isActive ? 'active' : ''}`;
+            const name = t[patch.nameKey] || patch.nameKey;
+            let btnHTML = isActive ? `<button class="action-btn btn-equipped" style="cursor:default;">${btnTextEquipped}</button>` : `<button class="action-btn btn-equip" onclick="window.equipPatch('${patch.id}')">${btnTextEquip}</button>`;
+            card.innerHTML = `<div class="skin-preview-box"><canvas class="preview-canvas" data-patch="${patch.id}" width="100" height="100"></canvas></div><div style="font-weight:bold; color:#fff">${name}</div>${btnHTML}`;
+            ui.weaponList.appendChild(card);
+        });
+    }
+}
+
+window.buyPatch = (id) => {
+    const p = PATCHES[id];
+    if(GAME.coins >= p.price) {
+        GAME.coins -= p.price;
+        if(!GAME.ownedPatches) GAME.ownedPatches = [];
+        GAME.ownedPatches.push(id);
+        updateUI(); updateMenuStats(); renderShop(); window.saveGame(); SoundSys.buy(); requestAnimationFrame(renderPreviews);
+    } else { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); SoundSys.error(); }
+}
+
+window.equipPatch = (id) => {
+    GAME.currentPatch = id;
+    renderInventory(); window.saveGame(); SoundSys.buy(); updateUI(); requestAnimationFrame(renderPreviews);
 }
 
 window.buySkin = (id) => {
@@ -2117,11 +2063,6 @@ window.buySkin = (id) => {
     if(GAME.coins >= s.price) {
         GAME.coins -= s.price; 
         GAME.ownedSkins.push(id); 
-        
-        // Auto equip optional, let's keep manual equip via inventory to follow request strictness "Inventory -> Owned"
-        // But for UX, showing owned immediately is good.
-        // We do NOT auto equip here based on user request implication "Envanterde satın aldıklarım gözüksün".
-        
         updateUI(); 
         updateMenuStats();
         renderShop();
@@ -2225,14 +2166,14 @@ function shoot() {
     if(GAME.currentWeapon === 'canik') { baseRecoil = 22; baseAngle = -0.16; } 
     if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } 
     if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
-    if(GAME.currentWeapon === 'mpt55') { baseRecoil = 28; baseAngle = -0.12; } // Tüfek olduğu için omuz desteği var, açısal tepme daha az ama hissi tok.
+    if(GAME.currentWeapon === 'mpt55') { baseRecoil = 28; baseAngle = -0.12; }
     
     GUN.recoilX = baseRecoil * rMod; 
     GUN.recoilAngle = baseAngle * rMod; 
     GUN.slideOffset = (GAME.currentWeapon === 'magnum' || GAME.currentWeapon === 'mpt55') ? 40 : 25; 
     
     let barrelLen = GUN.attachments.silencer ? 95 : 70; 
-    if(GAME.currentWeapon === 'mpt55') barrelLen = GUN.attachments.silencer ? 140 : 110; // Tüfek namlusu uzun
+    if(GAME.currentWeapon === 'mpt55') barrelLen = GUN.attachments.silencer ? 140 : 110;
 
     const visualAngle = GUN.angle + GUN.recoilAngle * 0.5; 
     const nX = (GUN.x - GUN.recoilX*0.5) + Math.cos(visualAngle) * barrelLen; 
@@ -2241,7 +2182,7 @@ function shoot() {
 
     let spread = (Math.random()-0.5) * 0.015; 
     if(GUN.attachments.scope) spread = 0; 
-    if(GAME.currentWeapon === 'mpt55') spread *= 0.6; // Tüfek daha isabetli
+    if(GAME.currentWeapon === 'mpt55') spread *= 0.6;
 
     const damage = (45 + (GAME.weaponLevel - 1) * 10) * dmgMult;
     let bulletSpeed = 30; 
@@ -2260,11 +2201,8 @@ function reload() {
     if(GUN.reloading || GUN.ammo === GUN.maxAmmo) return;
     if(GAME.coins < GAME.reloadCost) { ui.coinDisplay.classList.add('no-money'); setTimeout(()=>ui.coinDisplay.classList.remove('no-money'), 400); return; }
     GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; 
-    
-    // Şarjör görseli ayarı
     let magW = 15; let magH = 35;
-    if(GAME.currentWeapon === 'mpt55') { magW = 20; magH = 45; } // MPT şarjörü daha büyük
-
+    if(GAME.currentWeapon === 'mpt55') { magW = 20; magH = 45; }
     magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: magW, height: magH }); 
     SoundSys.reload(); 
     setTimeout(() => { GUN.ammo = GUN.maxAmmo; GUN.reloading = false; updateUI(); }, wData.reloadTime);
@@ -2280,6 +2218,183 @@ function drawHitmanEffect(ctx) {
 function drawRankUpEffect(ctx) {
     if (!RANK_UP_ANIM.active) return; RANK_UP_ANIM.timer--; if (RANK_UP_ANIM.timer <= 0) { RANK_UP_ANIM.active = false; return; }
     const cx = width / 2; const cy = height / 2; const alpha = Math.min(1, RANK_UP_ANIM.timer / 50); ctx.save(); ctx.globalAlpha = alpha; const rankData = getRankData(); const color = rankData.color; ctx.fillStyle = "rgba(0, 0, 0, 0.9)"; ctx.fillRect(0, 0, width, height); ctx.textAlign = "center"; ctx.shadowBlur = 30; ctx.shadowColor = color; ctx.font = "900 80px 'Segoe UI'"; ctx.fillStyle = color; ctx.fillText(RANK_UP_ANIM.text, cx, cy - 40); ctx.font = "bold 50px 'Segoe UI'"; ctx.fillStyle = "#fff"; ctx.fillText(RANK_UP_ANIM.subText, cx, cy + 40); if (RANK_UP_ANIM.rewardText) { ctx.font = "bold 30px 'Segoe UI'"; ctx.fillStyle = "#22c55e"; ctx.shadowColor = "#22c55e"; ctx.shadowBlur = 10; ctx.fillText(RANK_UP_ANIM.rewardText, cx, cy + 90); } for(let i=0; i<8; i++) { ctx.fillStyle = Math.random() > 0.5 ? color : "#fff"; ctx.shadowColor = color; ctx.fillRect(cx + (Math.random()-0.5)*500, cy + (Math.random()-0.5)*400, 5, 5); } ctx.restore();
+}
+
+// YAMA ÇİZİM FONKSİYONU
+function drawPatch(ctx, x, y, scale = 1, patchId = null) {
+    const id = patchId || GAME.currentPatch || 'patch_ops';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    
+    // Kumaş Dokusu (Pattern)
+    // Siyah/Koyu Gri varsayılan zemin
+    const fabricColor = (id === 'patch_tr') ? '#b91c1c' : ((id === 'patch_us') ? '#1e293b' : '#111');
+    
+    // Gölge (Patch'in hafif kabarık durması için)
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 10 * scale;
+    ctx.shadowOffsetX = 4 * scale;
+    ctx.shadowOffsetY = 4 * scale;
+
+    // Ana Daire
+    ctx.beginPath();
+    ctx.arc(0, 0, 40, 0, Math.PI*2);
+    ctx.fillStyle = fabricColor;
+    ctx.fill();
+    
+    // Gölgeyi sıfırla (içerik için)
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Kumaş Efekti (Noise)
+    if(SETTINGS.graphics !== 'low') {
+        ctx.fillStyle = "rgba(255,255,255,0.05)";
+        for(let i=0; i<100; i++) {
+             // Rastgele noktalarla kumaş pürüzü
+             const r = Math.random() * 38;
+             const a = Math.random() * Math.PI * 2;
+             ctx.fillRect(Math.cos(a)*r, Math.sin(a)*r, 1, 1);
+        }
+        // Kanvas dokusu (ızgara)
+        ctx.fillStyle = "rgba(0,0,0,0.1)";
+        for(let i=-40; i<40; i+=3) {
+             ctx.fillRect(i, -40, 1, 80);
+             ctx.fillRect(-40, i, 80, 1);
+        }
+    }
+
+    // Dikiş (Stitching)
+    ctx.beginPath();
+    ctx.arc(0, 0, 36, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]); // Dikiş efekti
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset
+
+    // İÇERİK
+    ctx.clip(); // Dışarı taşmayı önle (gerçi daire çizdik ama garanti olsun)
+
+    if (id === 'patch_tr') {
+        // Türk Bayrağı (Ay Yıldız)
+        // Hilal
+        ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 2; // İşleme hissi
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(-5, 0, 12, 0, Math.PI*2); // Dış daire
+        ctx.fill();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(-2, 0, 10, 0, Math.PI*2); // İç kesim
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+        
+        // Yıldız
+        ctx.save();
+        ctx.translate(12, 0);
+        ctx.rotate(-0.2);
+        ctx.beginPath();
+        drawStar(ctx, 0, 0, 5, 8, 5);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+        ctx.restore();
+
+    } else if (id === 'patch_us') {
+        // ABD Bayrağı (Yuvarlak stilize)
+        // Canton (Mavi alan)
+        ctx.fillStyle = "#1e3a8a"; // Koyu mavi
+        ctx.beginPath();
+        ctx.arc(0, 0, 40, Math.PI, Math.PI*1.5); // Sol üst çeyrek
+        ctx.lineTo(0,0);
+        ctx.fill();
+        
+        // Şeritler (Kırmızı Beyaz)
+        // Kalan alanı doldurmak zor, maskeleme kullanalım
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, 40, 0, Math.PI*2);
+        ctx.clip();
+        
+        // Sadece mavi alan dışına şerit çizmek yerine üstüne çizip maviyi tekrar çizelim
+        // Zemin zaten mavi değil, kırmızı/beyaz şerit yapalım
+        for(let i=-40; i<40; i+=10) {
+            ctx.fillStyle = (i/10)%2===0 ? "#b91c1c" : "#fff";
+            ctx.fillRect(-40, i, 80, 10);
+        }
+        
+        // Mavi Alan (Sol Üst)
+        ctx.fillStyle = "#1e3a8a";
+        ctx.beginPath();
+        ctx.moveTo(-40, 0);
+        ctx.arc(0, 0, 40, Math.PI, Math.PI*1.5); 
+        ctx.lineTo(0, -40);
+        ctx.lineTo(0, 0);
+        ctx.lineTo(-40, 0);
+        ctx.fill();
+        
+        // Yıldızlar
+        ctx.fillStyle = "#fff";
+        ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 2;
+        for(let r=0; r<3; r++) {
+            for(let c=0; c<3; c++) {
+                 ctx.beginPath();
+                 drawStar(ctx, -30 + c*10, -30 + r*10, 3, 2, 5);
+                 ctx.fill();
+            }
+        }
+        ctx.restore();
+
+    } else {
+        // Spec Ops (Kuru kafa veya Logo)
+        ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 2;
+        ctx.fillStyle = "#333"; // Koyu gri logo
+        // Basit Kuru Kafa
+        ctx.beginPath();
+        ctx.arc(0, -5, 12, 0, Math.PI*2);
+        ctx.rect(-8, 5, 16, 12);
+        ctx.fill();
+        
+        ctx.fillStyle = "#111"; // Gözler
+        ctx.beginPath(); ctx.arc(-4, -5, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(4, -5, 3, 0, Math.PI*2); ctx.fill();
+        // Dişler
+        ctx.fillRect(-5, 10, 2, 5);
+        ctx.fillRect(-1, 10, 2, 5);
+        ctx.fillRect(3, 10, 2, 5);
+        
+        ctx.font = "bold 8px Arial";
+        ctx.fillStyle = "#555";
+        ctx.textAlign = "center";
+        ctx.fillText("SPEC OPS", 0, 25);
+    }
+    
+    ctx.restore();
+}
+
+// Helper: Yıldız çizimi
+function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {
+    let rot = Math.PI / 2 * 3;
+    let x = cx;
+    let y = cy;
+    let step = Math.PI / spikes;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+    }
+    ctx.lineTo(cx, cy - outerRadius);
+    ctx.closePath();
 }
 
 function loop() {
@@ -2335,6 +2450,14 @@ function loop() {
             ctx.stroke();
             ctx.setLineDash([]);
         }
+
+        // --- DRAW PATCH (HUD / ARM) ---
+        // Ekranın sol orta-alt kısmında, silahın gerisinde (vücut üzerinde gibi)
+        // Silah x: width * 0.2 (soldan %20)
+        // Patch konumu: x: 60, y: height - 120 (biraz aşağıda)
+        if (GAME.currentPatch) {
+            drawPatch(ctx, 60, height - 120, 1.2, GAME.currentPatch);
+        }
     }
 
     if (GAME.state === 'playing' && !GAME.isPaused) {
@@ -2386,7 +2509,6 @@ function loop() {
                 reflexSpawnTimer = 60 - Math.min(40, GAME.level * 3); 
             }
             
-            // CLEANUP: Remove inactive targets to prevent memory leak
             reflexTargets = reflexTargets.filter(t => t.active);
 
             reflexTargets.forEach(t => {
@@ -2414,7 +2536,6 @@ function loop() {
                 reflexSpawnTimer = 45 - Math.min(25, GAME.level * 2); 
             }
 
-            // CLEANUP: Remove inactive targets
             reflexTargets = reflexTargets.filter(t => t.active);
 
             reflexTargets.forEach(t => {
@@ -2711,139 +2832,221 @@ function drawDetailedMPT55(ctx, x, y, angle, slideOffset, skinOverride = null, s
     const skin = skinOverride || SKINS[GAME.currentSkin];
     const silencerId = silencerOverride || GAME.currentSilencer;
     
-    // Renk Paleti (MPT Genelde Siyah veya Kamuflaj olur)
     const isCamo = skin.id === 'skin_camo';
     const mainColor = isCamo ? '#3f4e38' : (skin.color === '#1a1a1a' ? '#222' : skin.color);
     const partColor = isCamo ? '#2c3327' : '#111';
     const accentColor = '#333';
 
-    // --- DİPÇİK (STOCK) ---
-    // Dipçik tüpü (buffer tube)
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(-85, -5, 40, 10);
-    // Dipçik Gövdesi
     ctx.fillStyle = mainColor;
     ctx.beginPath();
     ctx.moveTo(-90, -10);
     ctx.lineTo(-50, -10);
     ctx.lineTo(-50, 15);
-    ctx.lineTo(-80, 25); // Dipçik altı eğimi
+    ctx.lineTo(-80, 25); 
     ctx.lineTo(-90, 25);
     ctx.closePath();
     ctx.fill();
-    // Dipçik Pedi (Lastik kısım)
     ctx.fillStyle = '#050505';
     ctx.fillRect(-93, -12, 6, 40);
-    // Dipçik ayar mandalı
     ctx.fillStyle = '#111';
     ctx.fillRect(-70, 15, 10, 5);
 
-    // --- GÖVDE (RECEIVER) ---
-    // Alt Gövde (Lower Receiver)
     ctx.fillStyle = mainColor;
     ctx.beginPath();
     ctx.moveTo(-45, -8);
     ctx.lineTo(10, -8);
-    ctx.lineTo(10, 10); // Şarjör yuvası önü
+    ctx.lineTo(10, 10); 
     ctx.lineTo(-15, 10);
-    ctx.lineTo(-20, 25); // Kabza arkası
+    ctx.lineTo(-20, 25); 
     ctx.lineTo(-40, 25);
     ctx.lineTo(-45, 10);
     ctx.closePath();
     ctx.fill();
 
-    // Üst Gövde (Upper Receiver)
     ctx.fillStyle = partColor;
     ctx.fillRect(-45, -22, 60, 14);
     
-    // --- KABZA (PISTOL GRIP) ---
     ctx.fillStyle = mainColor;
     ctx.beginPath();
     ctx.moveTo(-25, 10);
-    ctx.quadraticCurveTo(-20, 30, -35, 45); // Ergonomik kavis
+    ctx.quadraticCurveTo(-20, 30, -35, 45); 
     ctx.lineTo(-20, 48);
     ctx.lineTo(-10, 25);
     ctx.lineTo(-15, 10);
     ctx.closePath();
     ctx.fill();
-    // Kabza detayları (tırtık)
     if(SETTINGS.graphics !== 'low') {
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.fillRect(-28, 20, 5, 20);
     }
 
-    // --- ŞARJÖR (MAGAZINE) ---
-    // 30'luk STANAG Şarjör (Eğimli)
     ctx.save();
     ctx.translate(0, 10);
-    ctx.rotate(0.15); // Hafif öne eğik
+    ctx.rotate(0.15); 
     ctx.fillStyle = '#222';
     ctx.beginPath();
     ctx.moveTo(-5, 0);
     ctx.lineTo(8, 0);
-    ctx.lineTo(5, 40); // Uzun şarjör
+    ctx.lineTo(5, 40); 
     ctx.lineTo(-8, 38);
     ctx.closePath();
     ctx.fill();
-    // Şarjör çizgileri
     ctx.fillStyle = '#333';
     ctx.fillRect(-4, 5, 8, 2);
     ctx.fillRect(-3, 15, 7, 2);
     ctx.fillRect(-2, 25, 6, 2);
     ctx.restore();
 
-    // --- EL KUNDAĞI (HANDGUARD) & NAMLU ---
-    // El kundağı (Quad Rail görünümü)
     ctx.fillStyle = mainColor;
     ctx.fillRect(15, -20, 65, 18);
     
-    // Ray detayları (Picatinny delikleri)
     if(SETTINGS.graphics !== 'low') {
         ctx.fillStyle = '#000';
         for(let i=0; i<8; i++) {
             ctx.beginPath();
             ctx.arc(20 + i*8, -11, 2, 0, Math.PI*2);
             ctx.fill();
-            // Üst ray tırtıkları
             ctx.fillRect(20 + i*8, -22, 3, 2);
         }
     }
 
-    // Namlu
-    ctx.fillStyle = '#111';
-    ctx.fillRect(80, -14, 30, 6); // Namlu çıkıntısı
+    // Özel MPT Skin Efektleri
+    if (skin.id === 'skin_mpt_wrapped') {
+        const clothColor = '#c2b280';
+        // Sargılar
+        ctx.fillStyle = clothColor;
+        // El kundağı sargıları
+        for(let i=0; i<3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(25 + i*15, -20);
+            ctx.lineTo(35 + i*15, -22);
+            ctx.lineTo(40 + i*15, -5);
+            ctx.lineTo(30 + i*15, -3);
+            ctx.fill();
+            // Gölgelendirme
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(30 + i*15, -22, 2, 20);
+            ctx.fillStyle = clothColor;
+        }
 
-    // Alev Gizleyen (Flash Hider)
+        // SALLANAN BEZ PARÇASI (Animasyonlu)
+        const time = Date.now() * 0.008;
+        const sway = Math.sin(time) * 3; // Doğal salınım
+        const recoilKick = slideOffset * 2; // Ateş edince savrulma
+        
+        ctx.save();
+        ctx.translate(55, -5); // Asılma noktası (El kundağı altı)
+        
+        // Bez açısı (Recoil ile geriye doğru savrulur gibi görünmesi için açıyı ters çeviriyoruz veya öne atıyoruz)
+        const angleSway = (Math.sin(time * 0.5) * 0.2) + (recoilKick * 0.05); 
+        ctx.rotate(angleSway);
+
+        ctx.fillStyle = '#bfa57d'; // Bez rengi
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(12, 0);
+        
+        // Bez ucu koordinatları (Bezier eğrisi ile sarkma efekti)
+        const tipX = 8 + (sway * 0.5) + recoilKick; 
+        const tipY = 25 + Math.abs(sway); 
+        
+        ctx.quadraticCurveTo(15 + recoilKick, 10, tipX + 5, tipY); 
+        ctx.lineTo(tipX - 5, tipY + 2);
+        ctx.quadraticCurveTo(0 + recoilKick, 10, -5, 5); 
+        ctx.closePath();
+        ctx.fill();
+        
+        // Bez yırtık detayları
+        if (SETTINGS.graphics !== 'low') {
+             ctx.fillStyle = 'rgba(0,0,0,0.2)';
+             ctx.beginPath(); ctx.arc(tipX, tipY-5, 2, 0, Math.PI*2); ctx.fill();
+        }
+
+        ctx.restore();
+    } else if (skin.id === 'skin_mpt_forest') {
+        // Orman kamuflaj ağı deseni
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        for(let i=0; i<6; i++) {
+            ctx.beginPath();
+            ctx.moveTo(20 + i*10, -20);
+            ctx.lineTo(25 + i*10, -5);
+            ctx.lineTo(30 + i*10, -20);
+            ctx.fill();
+        }
+    } else if (skin.id === 'skin_mpt_branches' || skin.id === 'skin_mpt_autumn') {
+        const isAutumn = skin.id === 'skin_mpt_autumn';
+        const time = Date.now() * 0.005;
+        const recoilShake = slideOffset * 0.15; 
+        
+        ctx.save();
+        // Attachment points
+        const branches = [
+            {x: 60, y: -5, len: 25, ang: 0.5, swaySpd: 1},
+            {x: 40, y: -5, len: 20, ang: 0.8, swaySpd: 1.2},
+            {x: 80, y: -8, len: 15, ang: 0.3, swaySpd: 0.8},
+            {x: -10, y: 15, len: 18, ang: 2.5, swaySpd: 0.9} 
+        ];
+
+        branches.forEach((b, i) => {
+            ctx.save();
+            ctx.translate(b.x, b.y);
+            
+            // Calculate dynamic angle
+            const currentSway = Math.sin(time * b.swaySpd + i) * 0.1;
+            const kickRot = Math.sin(time * 20) * recoilShake * (i%2==0 ? 1 : -1); 
+            
+            ctx.rotate(b.ang + currentSway + kickRot);
+
+            // Draw Branch
+            ctx.strokeStyle = isAutumn ? '#6d4c41' : '#4e342e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(5, 0, b.len, 0);
+            ctx.stroke();
+
+            // Draw Leaves/Twigs
+            ctx.fillStyle = isAutumn ? '#d84315' : '#2e7d32'; 
+            if(isAutumn && i%2===0) ctx.fillStyle = '#fbc02d'; 
+
+            for(let j=0; j<3; j++) {
+                const leafDist = b.len * (0.5 + j*0.25);
+                ctx.beginPath();
+                ctx.ellipse(leafDist, (j%2==0?2:-2), 4, 2, 0.5 * (j%2==0?1:-1), 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        });
+        ctx.restore();
+    }
+
+    ctx.fillStyle = '#111';
+    ctx.fillRect(80, -14, 30, 6); 
+
     ctx.fillStyle = '#000';
     ctx.fillRect(110, -15, 10, 8);
-    // Yarıklar
     ctx.fillStyle = '#222';
     ctx.fillRect(112, -15, 2, 8);
     ctx.fillRect(116, -15, 2, 8);
 
-    // --- NİŞANGAH (SIGHTS) ---
-    // MPT-55 üzerinde genelde katlanır nişangah veya taşıma kolu olur. Biz ray üstü nişangah yapalım.
-    // Arka Nişangah
     ctx.fillStyle = '#111';
     ctx.fillRect(-30, -28, 10, 6);
-    ctx.fillRect(-28, -32, 2, 4); // Gez deliği
+    ctx.fillRect(-28, -32, 2, 4); 
     
-    // Ön Nişangah
     ctx.fillStyle = '#111';
     ctx.fillRect(70, -26, 8, 6);
-    ctx.fillRect(73, -30, 2, 4); // Arpacık pimi
+    ctx.fillRect(73, -30, 2, 4); 
 
-    // --- MEKANİZMA (BOLT) ---
-    // Geri tepme simülasyonu için kovan atma boşluğu
     ctx.fillStyle = '#000';
-    ctx.fillRect(-10, -18, 15, 6); // Ejection port
+    ctx.fillRect(-10, -18, 15, 6); 
     
-    // Bolt Carrier (Geri gidip gelen parça)
-    const boltPos = Math.min(10, slideOffset); // MPT'de bolt içeride hareket eder
+    const boltPos = Math.min(10, slideOffset); 
     ctx.fillStyle = '#333';
     ctx.fillRect(-10 - boltPos, -17, 14, 4);
 
-    // Tetik
     ctx.fillStyle = '#111';
     ctx.beginPath();
     ctx.arc(-8, 5, 4, 0, Math.PI);
@@ -2851,7 +3054,6 @@ function drawDetailedMPT55(ctx, x, y, angle, slideOffset, skinOverride = null, s
 
     drawSkinDetails(ctx, skin, 'mpt55');
     
-    // Eklentiler
     let attX = 20;
     if(silencerId) attX += 15;
     
@@ -2871,7 +3073,6 @@ function drawSkinDetails(ctx, skin, weaponType) {
     if (skin.id === 'skin_turkish') { ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#e30a17'; ctx.beginPath(); ctx.arc(cx+2, cy, 3, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+8, cy, 1, 0, Math.PI*2); ctx.fill(); }
     if (skin.id === 'skin_usa') { ctx.fillStyle = '#fff'; for(let i=0; i<3; i++) { ctx.fillRect(cx, stripeYStart + (i*6), 45, stripeHeight); } ctx.fillStyle = '#3c3b6e'; ctx.fillRect(starBaseX, stripeYStart-2, 40, 20); ctx.fillStyle = '#fff'; for(let r=0; r<3; r++) { for(let c=0; c<4; c++) { ctx.beginPath(); ctx.arc(starBaseX + 5 + c*10, stripeYStart + 2 + r*6, 1.5, 0, Math.PI*2); ctx.fill(); } } }
     if (skin.id === 'skin_camo') { 
-        // Basit camo deseni
         ctx.fillStyle = '#2c3327';
         for(let i=0; i<5; i++) {
              ctx.beginPath();
@@ -2887,7 +3088,7 @@ function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock
     let silOffset = 0; let scopeOffset = 0; let laserX = 18; let laserY = 12;
     if (weaponType === 'beretta') { silOffset = 15; } if (weaponType === 'canik') { silOffset = 10; } if (weaponType === 'fn57') { silOffset = 15; }
     if (weaponType === 'magnum') { silOffset = 80; scopeOffset = 65; laserX = 60; laserY = 8; }
-    if (weaponType === 'mpt55') { silOffset = 110; scopeOffset = 20; laserX = 65; laserY = -5; } // MPT ayarları
+    if (weaponType === 'mpt55') { silOffset = 110; scopeOffset = 20; laserX = 65; laserY = -5; } 
 
     if (shouldDraw && silencerId) { 
         if (silencerId === 'silencer_gold') { ctx.fillStyle = '#ffd700'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#B8860B'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); } 
@@ -2897,22 +3098,19 @@ function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock
     if(showAccessories && GUN.attachments.scope) { 
         const rX = sX + 15 + scopeOffset; 
         
-        // MPT için ACOG tarzı dürbün çizelim
         if(weaponType === 'mpt55') {
             ctx.fillStyle = '#111';
             ctx.beginPath();
-            ctx.moveTo(rX, -22); // Ray bağlantısı
-            ctx.lineTo(rX+10, -30); // Dürbün gövdesi altı
-            ctx.lineTo(rX-5, -35); // Oküler
-            ctx.lineTo(rX+35, -35); // Objektif üstü
-            ctx.lineTo(rX+40, -30); // Objektif altı
-            ctx.lineTo(rX+20, -22); // Ray bağlantısı ön
+            ctx.moveTo(rX, -22); 
+            ctx.lineTo(rX+10, -30); 
+            ctx.lineTo(rX-5, -35); 
+            ctx.lineTo(rX+35, -35); 
+            ctx.lineTo(rX+40, -30); 
+            ctx.lineTo(rX+20, -22); 
             ctx.fill();
-            // Lens
             ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
             ctx.beginPath(); ctx.ellipse(rX+38, -32.5, 2, 4, 0, 0, Math.PI*2); ctx.fill();
         } else {
-            // Standart Red Dot
             ctx.fillStyle = '#111'; ctx.fillRect(rX, -18, 20, 4); ctx.beginPath(); ctx.moveTo(rX, -18); ctx.lineTo(rX, -28); ctx.lineTo(rX+20, -28); ctx.lineTo(rX+20, -18); ctx.fill(); ctx.fillStyle = 'rgba(0,255,255,0.2)'; ctx.fillRect(rX+2, -26, 16, 8); ctx.fillStyle = 'red'; ctx.fillRect(rX+9, -23, 2, 2); 
         }
     }
@@ -2975,34 +3173,94 @@ function renderPreviews() {
         
         const skinId = canvas.getAttribute('data-skin');
         const weaponId = canvas.getAttribute('data-weapon');
+        const patchId = canvas.getAttribute('data-patch');
         
         ctx.save();
+        
+        // ÖZEL KAPAK TASARIMLARI (MPT SKİNLERİ İÇİN ARKA PLAN)
+        if (skinId && skinId.startsWith('skin_mpt_')) {
+            // Arka Plan Çizimi
+            if (skinId === 'skin_mpt_wrapped') {
+                // Çöl / Kıyamet Sonrası Teması
+                const grd = ctx.createLinearGradient(0, 0, 0, h);
+                grd.addColorStop(0, "#dcb482");
+                grd.addColorStop(1, "#8c6e48");
+                ctx.fillStyle = grd;
+                ctx.fillRect(0, 0, w, h);
+                // Rüzgar çizgileri / toz
+                ctx.fillStyle = "rgba(255,255,255,0.1)";
+                ctx.beginPath();
+                ctx.moveTo(0, h); ctx.lineTo(w, h-20); ctx.lineTo(w, h); ctx.fill();
+                ctx.fillStyle = "rgba(0,0,0,0.1)";
+                for(let i=0; i<20; i++) ctx.fillRect(Math.random()*w, Math.random()*h, Math.random()*20, 1);
+            } else if (skinId === 'skin_mpt_forest' || skinId === 'skin_mpt_branches') {
+                // Derin Orman Teması
+                const grd = ctx.createLinearGradient(0, 0, 0, h);
+                grd.addColorStop(0, "#14532d"); // Dark Green
+                grd.addColorStop(1, "#052e16"); // Darker Green
+                ctx.fillStyle = grd;
+                ctx.fillRect(0, 0, w, h);
+                // Ağaç gölgeleri / Yapraklar
+                ctx.fillStyle = "rgba(0,0,0,0.2)";
+                for(let i=0; i<5; i++) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random()*w, h, 30 + Math.random()*20, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            } else if (skinId === 'skin_mpt_autumn') {
+                // Sonbahar Teması
+                const grd = ctx.createLinearGradient(0, 0, 0, h);
+                grd.addColorStop(0, "#7c2d12"); // Rust
+                grd.addColorStop(1, "#451a03"); // Dark Brown
+                ctx.fillStyle = grd;
+                ctx.fillRect(0, 0, w, h);
+                // Düşen yaprak efekti
+                ctx.fillStyle = "#d97706"; // Amber
+                for(let i=0; i<10; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(Math.random()*w, Math.random()*h, 4, 2, Math.random(), 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+        }
+
         const cx = w / 2;
         const cy = h / 2;
-        
         ctx.translate(cx, cy);
         
-        // MPT preview'da çok büyük görünebilir, ölçeği ayarlayalım
-        if(weaponId === 'mpt55' || (skinId && GAME.currentWeapon === 'mpt55')) {
-             ctx.scale(0.8, 0.8);
-        } else {
-             ctx.scale(1.2, 1.2); 
-        }
-        
-        if (skinId) {
+        if (patchId) {
+            ctx.scale(1.0, 1.0);
+            drawPatch(ctx, 0, 0, 1, patchId);
+        } else if (skinId) {
             const skin = SKINS[skinId];
-            if (skin.type === 'silencer') {
-                 // Eğer MPT seçiliyse MPT üzerinde göster
+            
+            // MPT-55 ÖZEL SKİNLERİ KONTROLÜ
+            if (skinId.startsWith('skin_mpt_')) {
+                // MPT-55 Çiz (Glock yerine)
+                // Biraz küçültelim çünkü tüfek büyük
+                ctx.scale(0.7, 0.7); 
+                // Hafif açılı duruş
+                ctx.rotate(0.1);
+                drawDetailedMPT55(ctx, 0, 10, 0, 0, skin, null);
+                
+                // Ön izlemede "Special" ibaresi
+                ctx.restore(); ctx.save(); // Reset transforms
+                ctx.font = "bold 10px Segoe UI";
+                ctx.fillStyle = "rgba(255,255,255,0.8)";
+                ctx.textAlign = "right";
+                ctx.fillText("MPT-55 CLASS", w-5, h-5);
+                ctx.save(); // Dummy save for restore at end
+            } 
+            else if (skin.type === 'silencer') {
+                 ctx.scale(1.2, 1.2);
                  if(GAME.currentWeapon === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0, null, skinId);
                  else drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId);
             } else {
-                 // Skin önizlemesi için tabanca standardı devam edebilir veya silaha göre değişebilir
-                 // Şimdilik tabanca üzerinde gösteriyoruz (default) ama MPT seçiliyse MPT'de gösterelim mi?
-                 // Kullanıcı genel skin bakıyorsa tabanca iyidir. Ama oyun mantığında skin type 'gun' ise her silaha uyar.
-                 // Basitlik için Glock üzerinde gösteriyoruz.
+                 ctx.scale(1.2, 1.2);
                  drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null);
             }
         } else if (weaponId) {
+            if(weaponId === 'mpt55') ctx.scale(0.8, 0.8); else ctx.scale(1.2, 1.2);
             if(weaponId === 'glock') drawDetailedGlock(ctx, 0, 0, 0, 0);
             else if(weaponId === 'beretta') drawDetailedBeretta(ctx, 0, 0, 0, 0);
             else if(weaponId === 'canik') drawDetailedCanik(ctx, 0, 0, 0, 0);
@@ -3010,39 +3268,24 @@ function renderPreviews() {
             else if(weaponId === 'fn57') drawDetailedFN57(ctx, 0, 0, 0, 0);
             else if(weaponId === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0);
         }
-        
         ctx.restore();
     });
 }
 
 function renderRankInfo() {
     ui.rankListContainer.innerHTML = '';
-    
-    // Group ranks by category for cleaner list
-    const seenCategories = new Set();
-    const currentRank = getRankData();
-    
     RANK_SYSTEM.forEach((rank, idx) => {
-        // Show only the first tier (I) in the list to save space, OR show all if you want detailed list
-        // Let's show all but highlight current
-        
-        // Skip general tiers > 9 for list brevity
         if (rank.id === 'general' && rank.tier > 8) return;
-
         const div = document.createElement('div');
         const unlocked = GAME.level >= rank.min;
         const isCurrent = GAME.level >= rank.min && GAME.level <= rank.max;
         div.className = `rank-item ${unlocked ? 'unlocked' : ''}`;
         if(isCurrent) div.style.borderColor = rank.color;
-        
         const t = TRANSLATIONS[SETTINGS.language];
         const baseName = t[rank.baseNameKey] || rank.baseNameKey;
         const roman = ROMAN[rank.tier] || "";
         const fullName = `${baseName} ${roman}`;
-        
-        // Generate static SVG for list item
         const svgContent = getRankSVG(rank);
-        
         div.innerHTML = `
             <svg style="width:40px; height:40px; overflow:visible;" viewBox="0 0 40 40">${svgContent}</svg>
             <div style="flex:1;">
