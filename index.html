@@ -1231,6 +1231,11 @@ window.startGameFromMenu = function() {
     ui.mainMenu.style.display = 'none';
     ui.hudElements.forEach(el => el.style.display = 'flex');
     GAME.state = 'tutorial';
+    
+    // Müzik kontrolü: Maça girerken durdur
+    bgMusic.pause();
+    bgMusic.currentTime = 0;
+
     ui.tutorialOverlay.style.display = 'flex';
     const t = TRANSLATIONS[SETTINGS.language];
 
@@ -1298,6 +1303,10 @@ window.confirmExit = function() {
         setTimeout(() => { ui.notify.style.opacity = 0; }, 2000);
     }
     GAME.state = 'menu';
+    
+    // Müzik kontrolü: Menüye dönerken başlat
+    bgMusic.play().catch(e => console.log("Music resume failed", e));
+
     ui.hudElements.forEach(el => el.style.display = 'none');
     ui.mainMenu.style.display = 'flex';
     bullets = []; particles = []; shells = []; magazines = []; wallBlocks = []; reflexTargets = []; defenseEnemies = [];
