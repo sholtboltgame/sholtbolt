@@ -1378,6 +1378,17 @@ fetch('glock19voice.mp3')
     })
     .catch(e => console.warn("Tabanca sesi yüklenemedi, sentezleyici kullanılacak.", e));
 
+// YENİ: MPT-55 sesini yükle
+let mptBuffer = null;
+fetch('mpt55voice.mp3')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => actx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+        mptBuffer = audioBuffer;
+        console.log("MPT-55 sesi yüklendi: mpt55voice.mp3");
+    })
+    .catch(e => console.warn("MPT-55 sesi yüklenemedi.", e));
+
 const SoundSys = {
     resume: () => { if(actx.state === 'suspended') actx.resume(); },
     shoot: (silenced) => {
@@ -1385,6 +1396,22 @@ const SoundSys = {
         const t = actx.currentTime;
         const wType = GAME.currentWeapon;
         
+        // ÖZEL: MPT-55 İÇİN MP3 KULLAN (Susturucusuz)
+        if (!silenced && wType === 'mpt55' && mptBuffer) {
+            const src = actx.createBufferSource();
+            src.buffer = mptBuffer;
+            // Hafif pitch varyasyonu eklenebilir ama orijinal sesi korumak için 1.0 bırakıyoruz
+            src.playbackRate.value = 1.0; 
+            
+            const gainNode = actx.createGain();
+            gainNode.gain.value = 0.6; // Ses seviyesi ayarı
+
+            src.connect(gainNode);
+            gainNode.connect(actx.destination);
+            src.start(t);
+            return;
+        }
+
         // EĞER SUSTURUCU YOKSA VE SİLAH TABANCAYSA (MPT-55 HARİÇ) MP3 KULLAN
         if (!silenced && wType !== 'mpt55' && pistolBuffer) {
             const src = actx.createBufferSource();
@@ -1408,7 +1435,7 @@ const SoundSys = {
             return; // Sentezleyici kodunu atla
         }
 
-        // ESKİ SENTEZLEYİCİ (MPT-55 veya Susturucu veya MP3 yüklenemezse burası çalışır)
+        // ESKİ SENTEZLEYİCİ (Susturucu veya MP3 yüklenemezse burası çalışır)
         let punchFreq = 150;
         let punchType = 'triangle';
         let punchDecay = 0.2;
