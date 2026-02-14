@@ -1400,6 +1400,17 @@ fetch('magazinevoice.mp3')
     })
     .catch(e => console.warn("Şarjör sesi yüklenemedi.", e));
 
+// YENİ: Kovan sesi yükle (bulletvoice.mp3)
+let shellBuffer = null;
+fetch('bulletvoice.mp3')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => actx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+        shellBuffer = audioBuffer;
+        console.log("Kovan sesi yüklendi: bulletvoice.mp3");
+    })
+    .catch(e => console.warn("Kovan sesi yüklenemedi.", e));
+
 const SoundSys = {
     resume: () => { if(actx.state === 'suspended') actx.resume(); },
     shoot: (silenced) => {
@@ -1533,7 +1544,34 @@ const SoundSys = {
         g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.1);
         osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1);
     },
-    shell: () => { if(SETTINGS.graphics === 'low') return; setTimeout(()=>{ SoundSys.resume(); const t=actx.currentTime; const osc=actx.createOscillator(); const g=actx.createGain(); osc.frequency.setValueAtTime(1200,t); osc.frequency.exponentialRampToValueAtTime(800,t+0.05); g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.05); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.05); }, 200); },
+    shell: () => { 
+        if(SETTINGS.graphics === 'low') return; 
+        SoundSys.resume(); 
+        const t = actx.currentTime; 
+
+        // YENİ: MP3 KULLAN (Fiziksel çarpışma için)
+        if (shellBuffer) {
+            const src = actx.createBufferSource();
+            src.buffer = shellBuffer;
+            // Her düşüşte hafif ton farkı (0.9 ile 1.1 arası hız)
+            src.playbackRate.value = 0.9 + Math.random() * 0.2; 
+            
+            const gainNode = actx.createGain();
+            // Ses seviyesini biraz rastgele yap (0.3 - 0.5 arası)
+            gainNode.gain.value = 0.3 + Math.random() * 0.2;
+
+            src.connect(gainNode);
+            gainNode.connect(actx.destination);
+            src.start(t);
+            return;
+        }
+
+        // ESKİ SENTETİK SES (Yedek)
+        const osc=actx.createOscillator(); const g=actx.createGain(); 
+        osc.frequency.setValueAtTime(1200,t); osc.frequency.exponentialRampToValueAtTime(800,t+0.05); 
+        g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.05); 
+        osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.05); 
+    },
     boxDrop: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='square'; osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t+0.3); g.gain.setValueAtTime(0.5, t); g.gain.linearRampToValueAtTime(0, t+0.3); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.3); },
     levelup: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='triangle'; osc.frequency.setValueAtTime(440, t); osc.frequency.setValueAtTime(554, t+0.1); osc.frequency.setValueAtTime(659, t+0.2); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.6); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.6); },
     rankup: () => { SoundSys.resume(); const t = actx.currentTime; const osc = actx.createOscillator(); const g = actx.createGain(); osc.type='square'; osc.frequency.setValueAtTime(523.25, t); osc.frequency.setValueAtTime(659.25, t+0.1); osc.frequency.setValueAtTime(783.99, t+0.2); osc.frequency.setValueAtTime(1046.50, t+0.3); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+1.0); osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+1.0); },
@@ -2308,7 +2346,9 @@ function shoot() {
         prevX: nX, prevY: nY, active: true, power: damage
     }); 
     
-    shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); SoundSys.shell(); 
+    // GÜNCELLEME: SoundSys.shell() buradan kaldırıldı, artık fizik döngüsünde (yere çarpınca) çalacak.
+    shells.push({x: GUN.x, y:GUN.y-5, vx: -Math.random()*3-2, vy:-Math.random()*6-3, angle:0, life:100}); 
+    
     if(!GUN.attachments.silencer && SETTINGS.graphics !== 'low') { flashTimer = 3; flashPos = {x:nX, y:nY, angle:visualAngle}; }
 }
 
@@ -2805,7 +2845,25 @@ function loop() {
     });
     
     bullets = bullets.filter(b=>b.active);
-    shells.forEach(s => { if(!GAME.isPaused) { s.x+=s.vx; s.y+=s.vy; s.vy+=GRAVITY; s.angle+=0.2; s.life--; if(s.y>height-20){s.y=height-20;s.vy*=-0.5;s.vx*=0.8;} } if(s.life>0){ ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle); ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-1.5,6,3); ctx.restore(); } }); shells = shells.filter(s=>s.life>0);
+    
+    // KOVAN FİZİĞİ VE SESİ
+    shells.forEach(s => { 
+        if(!GAME.isPaused) { 
+            s.x+=s.vx; s.y+=s.vy; s.vy+=GRAVITY; s.angle+=0.2; s.life--; 
+            if(s.y>height-20){
+                // Yere çarpma kontrolü
+                // Eğer düşey hızı (vy) belirli bir değerin üstündeyse ses çal (sürüklenirken çalmasın)
+                if(Math.abs(s.vy) > 2) {
+                    SoundSys.shell();
+                }
+                
+                s.y=height-20; s.vy*=-0.5; s.vx*=0.8;
+            } 
+        } 
+        if(s.life>0){ ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle); ctx.fillStyle='#ffd700'; ctx.fillRect(-3,-1.5,6,3); ctx.restore(); } 
+    }); 
+    shells = shells.filter(s=>s.life>0);
+
     magazines.forEach(m => { if(!GAME.isPaused) { m.x+=m.vx; m.y+=m.vy; m.vy+=GRAVITY; m.angle+=0.1; if(m.y>height-20){m.y=height-20;m.vy=0;m.vx=0;m.angle=Math.PI/2;} } ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.angle); ctx.fillStyle='#111'; ctx.fillRect(-7,-17,14,34); ctx.fillStyle='#333'; ctx.fillRect(-7,15,16,4); ctx.restore(); });
     particles.forEach(p => { if(!GAME.isPaused) { p.x+=p.vx; p.y+=p.vy; p.vy+=GRAVITY; p.life-=0.02; } if(p.life>0){ ctx.globalAlpha=p.life; ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha=1; } }); particles = particles.filter(p=>p.life>0);
 
