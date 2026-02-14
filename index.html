@@ -1389,6 +1389,17 @@ fetch('mpt55voice.mp3')
     })
     .catch(e => console.warn("MPT-55 sesi yüklenemedi.", e));
 
+// YENİ: Şarjör sesini yükle (Tüm silahlar için)
+let magazineBuffer = null;
+fetch('magazinevoice.mp3')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => actx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+        magazineBuffer = audioBuffer;
+        console.log("Şarjör sesi yüklendi: magazinevoice.mp3");
+    })
+    .catch(e => console.warn("Şarjör sesi yüklenemedi.", e));
+
 const SoundSys = {
     resume: () => { if(actx.state === 'suspended') actx.resume(); },
     shoot: (silenced) => {
@@ -1493,7 +1504,24 @@ const SoundSys = {
         osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.2);
     },
     reload: () => {
-        SoundSys.resume(); const t = actx.currentTime;
+        SoundSys.resume(); 
+        const t = actx.currentTime;
+
+        // YENİ: EĞER MP3 YÜKLENDİYSE ONU KULLAN
+        if (magazineBuffer) {
+            const src = actx.createBufferSource();
+            src.buffer = magazineBuffer;
+            
+            const gainNode = actx.createGain();
+            gainNode.gain.value = 0.8; // Ses seviyesi
+
+            src.connect(gainNode);
+            gainNode.connect(actx.destination);
+            src.start(t);
+            return;
+        }
+
+        // ESKİ SENTEZLEYİCİ (Dosya yüklenemezse yedek olarak çalışır)
         const osc = actx.createOscillator(); const g = actx.createGain();
         osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, t); g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t+0.1);
         osc.connect(g); g.connect(actx.destination); osc.start(t); osc.stop(t+0.1);
