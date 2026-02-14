@@ -1367,6 +1367,17 @@ for (let i = 0; i < actx.sampleRate * 2; i++) {
     output[i] = Math.random() * 2 - 1;
 }
 
+// YENİ: Tabanca sesini yükle
+let pistolBuffer = null;
+fetch('glock19voice.mp3')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => actx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+        pistolBuffer = audioBuffer;
+        console.log("Tabanca sesi yüklendi: glock19voice.mp3");
+    })
+    .catch(e => console.warn("Tabanca sesi yüklenemedi, sentezleyici kullanılacak.", e));
+
 const SoundSys = {
     resume: () => { if(actx.state === 'suspended') actx.resume(); },
     shoot: (silenced) => {
@@ -1374,6 +1385,30 @@ const SoundSys = {
         const t = actx.currentTime;
         const wType = GAME.currentWeapon;
         
+        // EĞER SUSTURUCU YOKSA VE SİLAH TABANCAYSA (MPT-55 HARİÇ) MP3 KULLAN
+        if (!silenced && wType !== 'mpt55' && pistolBuffer) {
+            const src = actx.createBufferSource();
+            src.buffer = pistolBuffer;
+
+            // Her tabanca için ufak ton farkları yapalım ki hepsi aynı tınlamasın
+            let rate = 1.0;
+            if (wType === 'beretta') rate = 0.95; // Biraz daha tok
+            if (wType === 'canik') rate = 1.05;   // Biraz daha tiz/sert
+            if (wType === 'fn57') rate = 1.1;     // Daha keskin
+            if (wType === 'magnum') rate = 0.7;   // Çok daha kalın ve ağır (Deagle)
+
+            src.playbackRate.value = rate;
+            
+            const gainNode = actx.createGain();
+            gainNode.gain.value = 0.7; // MP3 sesi genelde yüksek olur, dengeledik
+
+            src.connect(gainNode);
+            gainNode.connect(actx.destination);
+            src.start(t);
+            return; // Sentezleyici kodunu atla
+        }
+
+        // ESKİ SENTEZLEYİCİ (MPT-55 veya Susturucu veya MP3 yüklenemezse burası çalışır)
         let punchFreq = 150;
         let punchType = 'triangle';
         let punchDecay = 0.2;
