@@ -728,6 +728,10 @@ const bgMusic = new Audio('sholtboltmenu.mp3');
 bgMusic.loop = true;
 bgMusic.volume = 0.4; // Ses seviyesi %40
 
+// SİLAH GÖRSELLERİ
+const ak47Img = new Image();
+ak47Img.src = 'ak47.svg'; // GitHub'daki dosya yolun
+
 let firebaseConfig;
 if (typeof __firebase_config !== 'undefined') {
     firebaseConfig = JSON.parse(__firebase_config);
@@ -1089,7 +1093,8 @@ const WEAPONS = {
     'canik': { name: 'Canik TP9 SF', capacity: 18, damage: 1.05, reloadTime: 1100, price: 5600, desc: "Turkish Perfection." },
     'magnum': { name: 'Desert Eagle', capacity: 8, damage: 2.5, reloadTime: 1800, price: 9500, desc: "Hand Cannon. Pure Power." },
     'fn57': { name: 'FN Five-seveN', capacity: 20, damage: 1.1, reloadTime: 1100, price: 11000, desc: "20 Rounds. Armor Piercing." },
-    'mpt55': { name: 'MPT-55', capacity: 30, damage: 1.4, reloadTime: 2200, price: 18000, desc: "National Infantry Rifle. 5.56mm." }
+    'mpt55': { name: 'MPT-55', capacity: 30, damage: 1.4, reloadTime: 2200, price: 18000, desc: "National Infantry Rifle. 5.56mm." },
+    'ak47': { name: 'AK-47', capacity: 30, damage: 1.8, reloadTime: 2500, price: 22000, desc: "Avtomat Kalashnikova. Heavy Hitter." }
 };
 
 const PATCHES = {
@@ -1418,12 +1423,12 @@ const SoundSys = {
         const t = actx.currentTime;
         const wType = GAME.currentWeapon;
         
-        // ÖZEL: MPT-55 İÇİN MP3 KULLAN (Susturucusuz)
-        if (!silenced && wType === 'mpt55' && mptBuffer) {
+        // ÖZEL: MPT-55 VE AK-47 İÇİN MP3 KULLAN (Susturucusuz)
+        if (!silenced && (wType === 'mpt55' || wType === 'ak47') && mptBuffer) {
             const src = actx.createBufferSource();
             src.buffer = mptBuffer;
-            // Hafif pitch varyasyonu eklenebilir ama orijinal sesi korumak için 1.0 bırakıyoruz
-            src.playbackRate.value = 1.0; 
+            // AK-47 için biraz daha kalın ses (rate düşür)
+            src.playbackRate.value = wType === 'ak47' ? 0.8 : 1.0; 
             
             const gainNode = actx.createGain();
             gainNode.gain.value = 0.6; // Ses seviyesi ayarı
@@ -1434,8 +1439,8 @@ const SoundSys = {
             return;
         }
 
-        // EĞER SUSTURUCU YOKSA VE SİLAH TABANCAYSA (MPT-55 HARİÇ) MP3 KULLAN
-        if (!silenced && wType !== 'mpt55' && pistolBuffer) {
+        // EĞER SUSTURUCU YOKSA VE SİLAH TABANCAYSA (MPT-55 VE AK47 HARİÇ) MP3 KULLAN
+        if (!silenced && wType !== 'mpt55' && wType !== 'ak47' && pistolBuffer) {
             const src = actx.createBufferSource();
             src.buffer = pistolBuffer;
 
@@ -2320,13 +2325,15 @@ function shoot() {
     if(GAME.currentWeapon === 'magnum') { baseRecoil = 45; baseAngle = -0.35; } 
     if(GAME.currentWeapon === 'fn57') { baseRecoil = 15; baseAngle = -0.10; }
     if(GAME.currentWeapon === 'mpt55') { baseRecoil = 28; baseAngle = -0.12; }
+    if(GAME.currentWeapon === 'ak47') { baseRecoil = 35; baseAngle = -0.20; }
     
     GUN.recoilX = baseRecoil * rMod; 
     GUN.recoilAngle = baseAngle * rMod; 
-    GUN.slideOffset = (GAME.currentWeapon === 'magnum' || GAME.currentWeapon === 'mpt55') ? 40 : 25; 
+    GUN.slideOffset = (GAME.currentWeapon === 'magnum' || GAME.currentWeapon === 'mpt55' || GAME.currentWeapon === 'ak47') ? 40 : 25; 
     
     let barrelLen = GUN.attachments.silencer ? 95 : 70; 
     if(GAME.currentWeapon === 'mpt55') barrelLen = GUN.attachments.silencer ? 140 : 110;
+    if(GAME.currentWeapon === 'ak47') barrelLen = GUN.attachments.silencer ? 130 : 100;
 
     const visualAngle = GUN.angle + GUN.recoilAngle * 0.5; 
     const nX = (GUN.x - GUN.recoilX*0.5) + Math.cos(visualAngle) * barrelLen; 
@@ -2358,6 +2365,7 @@ function reload() {
     GAME.coins -= GAME.reloadCost; updateUI(); GUN.reloading = true; const wData = WEAPONS[GAME.currentWeapon]; 
     let magW = 15; let magH = 35;
     if(GAME.currentWeapon === 'mpt55') { magW = 20; magH = 45; }
+    if(GAME.currentWeapon === 'ak47') { magW = 25; magH = 50; }
     magazines.push({ x: GUN.x - 10, y: GUN.y + 20, vx: -1, vy: 2, angle: 0, width: magW, height: magH }); 
     SoundSys.reload(); 
     setTimeout(() => { GUN.ammo = GUN.maxAmmo; GUN.reloading = false; updateUI(); }, wData.reloadTime);
@@ -2577,6 +2585,7 @@ function loop() {
              else if(wType==='magnum') drawDetailedMagnum(ctx,0,0,0,0); 
              else if(wType==='fn57') drawDetailedFN57(ctx,0,0,0,0); 
              else if(wType==='mpt55') drawDetailedMPT55(ctx,0,0,0,0);
+             else if(wType==='ak47') drawAK47(ctx,0,0,0,0);
              ctx.restore();
         }
         if(GAME.isStoreOpen || GAME.isWeaponStoreOpen) requestAnimationFrame(renderPreviews);
@@ -2873,6 +2882,7 @@ function loop() {
     else if(wType==='magnum') drawDetailedMagnum(ctx, gX, gY, gA, GUN.slideOffset);
     else if(wType==='fn57') drawDetailedFN57(ctx, gX, gY, gA, GUN.slideOffset);
     else if(wType==='mpt55') drawDetailedMPT55(ctx, gX, gY, gA, GUN.slideOffset);
+    else if(wType==='ak47') drawAK47(ctx, gX, gY, gA, GUN.slideOffset);
     else drawDetailedGlock(ctx, gX, gY, gA, GUN.slideOffset);
 
     if(HITMAN_ANIM.active) drawHitmanEffect(ctx);
@@ -3235,6 +3245,47 @@ function drawDetailedMPT55(ctx, x, y, angle, slideOffset, skinOverride = null, s
     ctx.restore();
 }
 
+function drawAK47(ctx, x, y, angle, slideOffset) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    
+    // SVG GÖRSELİ ÇİZİMİ
+    // Görseli ortalamak ve boyutlandırmak için ayarlar
+    // SVG'nin orijinal yönüne ve boyutuna göre bu değerler değişebilir
+    const width = 160;
+    const height = 80;
+    
+    // Geri tepme simülasyonu için görseli hafifçe sars
+    const kickX = slideOffset * 0.2; 
+    
+    if (ak47Img.complete && ak47Img.naturalWidth !== 0) {
+        ctx.drawImage(ak47Img, -50 - kickX, -40, width, height);
+    } else {
+        // Eğer görsel henüz yüklenmediyse veya hata verdiyse yedek bir kutu çiz
+        ctx.fillStyle = '#6d4c41'; // Ahşap rengi
+        ctx.fillRect(-50, -10, 100, 20);
+        ctx.fillStyle = '#222';
+        ctx.fillRect(50, -8, 40, 5); // Namlu
+        ctx.fillStyle = '#fff';
+        ctx.font = "10px Arial";
+        ctx.fillText("AK-47 (IMG)", -20, 5);
+    }
+
+    // Bolt hareketi (Eğer SVG'de bolt sabitse, üzerine basit bir animasyon ekleyebiliriz)
+    if (slideOffset > 0) {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-10 - slideOffset, -22, 10, 8); // Basit bolt simülasyonu
+    }
+
+    // Aksesuarlar için pozisyon ayarı
+    let attX = 30;
+    if (GAME.currentSilencer) attX += 20;
+    drawAttachments(ctx, attX, GAME.currentSilencer, 'ak47');
+
+    ctx.restore();
+}
+
 function drawSkinDetails(ctx, skin, weaponType) {
     if (SETTINGS.graphics === 'low') return; 
     let cx = 40; let cy = -8; let stripeYStart = -16; let stripeHeight = 3; let starBaseX = 5;
@@ -3242,6 +3293,7 @@ function drawSkinDetails(ctx, skin, weaponType) {
     else if (weaponType === 'magnum') { cx = 90; starBaseX = 65; cy = -12; stripeYStart = -20; } 
     else if (weaponType === 'fn57') { cx = 50; }
     else if (weaponType === 'mpt55') { cx = 30; cy = -11; stripeYStart = -15; starBaseX = 20; }
+    else if (weaponType === 'ak47') { cx = 10; cy = -15; }
 
     if (skin.id === 'skin_turkish') { ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#e30a17'; ctx.beginPath(); ctx.arc(cx+2, cy, 3, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx+8, cy, 1, 0, Math.PI*2); ctx.fill(); }
     if (skin.id === 'skin_usa') { ctx.fillStyle = '#fff'; for(let i=0; i<3; i++) { ctx.fillRect(cx, stripeYStart + (i*6), 45, stripeHeight); } ctx.fillStyle = '#3c3b6e'; ctx.fillRect(starBaseX, stripeYStart-2, 40, 20); ctx.fillStyle = '#fff'; for(let r=0; r<3; r++) { for(let c=0; c<4; c++) { ctx.beginPath(); ctx.arc(starBaseX + 5 + c*10, stripeYStart + 2 + r*6, 1.5, 0, Math.PI*2); ctx.fill(); } } }
@@ -3262,6 +3314,7 @@ function drawAttachments(ctx, sX, silencerIdOverride = null, weaponType = 'glock
     if (weaponType === 'beretta') { silOffset = 15; } if (weaponType === 'canik') { silOffset = 10; } if (weaponType === 'fn57') { silOffset = 15; }
     if (weaponType === 'magnum') { silOffset = 80; scopeOffset = 65; laserX = 60; laserY = 8; }
     if (weaponType === 'mpt55') { silOffset = 110; scopeOffset = 20; laserX = 65; laserY = -5; } 
+    if (weaponType === 'ak47') { silOffset = 100; scopeOffset = 10; laserX = 60; laserY = 0; }
 
     if (shouldDraw && silencerId) { 
         if (silencerId === 'silencer_gold') { ctx.fillStyle = '#ffd700'; ctx.fillRect(80 + silOffset, -12, 40, 10); ctx.fillStyle = '#B8860B'; for(let i=0; i<10; i++) ctx.fillRect(85 + i*3 + silOffset, -12, 1, 10); } 
@@ -3407,7 +3460,7 @@ function renderPreviews() {
         } else if (skinId) {
             const skin = SKINS[skinId];
             
-            // MPT-55 ÖZEL SKİNLERİ KONTROLÜ
+            // MPT-55 VE AK-47 ÖZEL SKİNLERİ KONTROLÜ
             if (skinId.startsWith('skin_mpt_')) {
                 // MPT-55 Çiz (Glock yerine)
                 // Biraz küçültelim çünkü tüfek büyük
@@ -3427,19 +3480,24 @@ function renderPreviews() {
             else if (skin.type === 'silencer') {
                  ctx.scale(1.2, 1.2);
                  if(GAME.currentWeapon === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0, null, skinId);
+                 else if(GAME.currentWeapon === 'ak47') drawAK47(ctx, 0, 0, 0, 0); // AK47 Silencer Preview
                  else drawDetailedGlock(ctx, 0, 0, 0, 0, null, skinId);
             } else {
                  ctx.scale(1.2, 1.2);
-                 drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null);
+                 if(GAME.currentWeapon === 'ak47') drawAK47(ctx, 0, 0, 0, 0); // AK47 Skin Preview
+                 else drawDetailedGlock(ctx, 0, 0, 0, 0, skin, null);
             }
         } else if (weaponId) {
             if(weaponId === 'mpt55') ctx.scale(0.8, 0.8); else ctx.scale(1.2, 1.2);
+            if(weaponId === 'ak47') ctx.scale(0.9, 0.9); // AK47 scale
+            
             if(weaponId === 'glock') drawDetailedGlock(ctx, 0, 0, 0, 0);
             else if(weaponId === 'beretta') drawDetailedBeretta(ctx, 0, 0, 0, 0);
             else if(weaponId === 'canik') drawDetailedCanik(ctx, 0, 0, 0, 0);
             else if(weaponId === 'magnum') drawDetailedMagnum(ctx, 0, 0, 0, 0);
             else if(weaponId === 'fn57') drawDetailedFN57(ctx, 0, 0, 0, 0);
             else if(weaponId === 'mpt55') drawDetailedMPT55(ctx, 0, 0, 0, 0);
+            else if(weaponId === 'ak47') drawAK47(ctx, 0, 0, 0, 0);
         }
         ctx.restore();
     });
